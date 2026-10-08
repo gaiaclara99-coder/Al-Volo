@@ -93,7 +93,7 @@ window.FRED_FLOW = {
           "placeholder": "Scrivi qui…"
         }
       ],
-      "closing": "Grazie. Venerdì ti mostro lo schema ricostruito con le risposte raccolte.",
+      "closing": "Grazie. Venerdì ti mostro di nuovo la mappa: potrai correggerla come preferisci.",
       "showScene": true,
       "showStart": true,
       "progress": {
@@ -108,7 +108,7 @@ window.FRED_FLOW = {
       "dayLabel": "Tappa 2 di 4",
       "teaser": "Fred ha uno schema da mostrarti",
       "greeting": [
-        "Ciao! Ecco la mappa {di_attivita}, ricostruita con le risposte raccolte finora.",
+        "Ciao! Ecco la mappa {di_attivita}.",
         "Il processo così mappato è corretto?"
       ],
       "askSelect": "Segnala il passaggio errato: toccalo nella mappa.",
@@ -143,10 +143,8 @@ window.FRED_FLOW = {
         "Oggi ti faccio qualche altra domanda {su_attivita}."
       ],
       "greetingIfChange": [
-        "Ciao, sono di nuovo Fred. Venerdì mi hai detto: «{testo}»."
-      ],
-      "greetingIfNote": [
-        "Ciao, sono di nuovo Fred. Venerdì mi hai detto: «{testo}»."
+        "Ciao, sono di nuovo Fred. L'ultima volta hai modificato la mappa: {testo}.",
+        "Oggi ti faccio qualche altra domanda {su_attivita}."
       ],
       "questions": [
         {
@@ -219,10 +217,7 @@ window.FRED_FLOW = {
       ],
       "processKey": "process",
       "greetingIfChange": [
-        "Ciao! Ecco lo schema aggiornato con quello che mi hai raccontato. I passaggi nuovi sono evidenziati."
-      ],
-      "greetingIfNote": [
-        "Ciao! Ecco lo schema con le tue parole annotate sul passaggio “{passaggio}”."
+        "Ciao! Ecco la mappa {di_attivita} con le modifiche che hai fatto tu."
       ],
       "refineLine": "Con le risposte di mercoledì ho aggiunto: {summary}.",
       "thinkingPrepare": "Fred sta preparando lo schema aggiornato…",
@@ -262,6 +257,11 @@ window.FRED_FLOW = {
         "Ciao! Sono Al Fly, il pilota di Al Volo."
       ],
       "intro": "Questa è la mappa {di_attivita}, confermata da te e dai colleghi.",
+      // Al Fly è diviso in tappe brevi: ogni riga è una tappa, con gli id delle domande che contiene
+      // (le domande di approfondimento seguono la loro domanda). Per raggrupparle, es. [["frequenza", "tempo"], …]
+      "tappe": [["frequenza"], ["tempo"], ["attenzione"], ["fermo"], ["inefficienze"]],
+      "greetingAgain": ["Ciao, sono di nuovo Al Fly."],
+      "closingLast": "Grazie! Per questa mappa le domande sono finite. Riparto.",
       "questions": [
         {
           "id": "frequenza",

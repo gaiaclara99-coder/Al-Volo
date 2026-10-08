@@ -277,10 +277,10 @@ window.FredDiagram = (function () {
           x: n._cx, y: by + bh * 0.72, "text-anchor": "middle", fill: "#FFFFFF", "font-size": S.font * 0.8, "font-weight": 700,
           "font-family": "Archivo, sans-serif"
         }, g);
-        t.textContent = "NUOVO";
+        t.textContent = "DA TE";
       }
 
-      const statusText = ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare" }[n.status] || "") + (n.isNew ? ", nuovo" : "");
+      const statusText = ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
       const title = s("title", {}, g);
       title.textContent = n.label + (statusText ? " (" + statusText + ")" : "");
       if (opts.onSelect) {
@@ -304,7 +304,7 @@ window.FredDiagram = (function () {
     el.className = "fd-legend";
     const hasNew = proc && proc.nodes && proc.nodes.some((n) => n.isNew);
     el.innerHTML =
-      (hasNew ? '<span><i class="lg lg-new"></i>Nuovo, dalle tue risposte</span>' : "") +
+      (hasNew ? '<span><i class="lg lg-new"></i>Cambiato da te</span>' : "") +
       '<span><i class="lg lg-ok"></i>Confermato</span>' +
       '<span><i class="lg lg-var"></i>Variante</span>' +
       '<span><i class="lg lg-ver"></i>Da verificare</span>';

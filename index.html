@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F2A44">
+<title>Al Volo – progetto pilota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================= Ingresso del pilota: privacy, divisione e ruolo ================= -->
+<section class="home welcome" id="welcome" hidden aria-labelledby="welcomeTitle">
+  <header class="home-head">
+    <h1 id="welcomeTitle">Al Volo</h1>
+    <p>Benvenuta, benvenuto nel progetto pilota.</p>
+  </header>
+  <p class="welcome-text" id="privacyText"></p>
+  <button type="button" class="btn btn-primary welcome-go" id="welcomeGo">Inizia</button>
+  <p class="home-note config-warning" id="configWarning" hidden>Indirizzo dello script non configurato in config.js: le risposte non vengono salvate.</p>
+</section>
+
+<!-- ================= Pagina iniziale per il cellulare: l'equipaggio di Al Volo ================= -->
+<section class="home" id="home" hidden aria-labelledby="homeTitle">
+  <header class="home-head">
+    <h1 id="homeTitle">Al Volo</h1>
+    <p>L'equipaggio che raccoglie, con le tue parole, come si lavora davvero.</p>
+  </header>
+  <div class="crew">
+    <button type="button" class="crew-card" data-start="mercoledi">
+      <img class="crew-avatar" data-crew="fred" alt="">
+      <span class="crew-text">
+        <strong>Fred Quenza</strong>
+        <span>Radio di bordo. Ricostruisce con te un'attività, passaggio per passaggio.</span>
+        <span class="crew-meta">4 tappe</span>
+      </span>
+    </button>
+    <button type="button" class="crew-card" data-start="alfly">
+      <img class="crew-avatar" data-crew="alfly" alt="">
+      <span class="crew-text">
+        <strong>Al Fly</strong>
+        <span>Pilota. Una domanda veloce e riparto!</span>
+        <span class="crew-meta">Parte dalla mappa confermata</span>
+      </span>
+    </button>
+    <div class="crew-card crew-soon" aria-disabled="true">
+      <img class="crew-avatar" data-crew="ally" alt="">
+      <span class="crew-text">
+        <strong>Ally Fly</strong>
+        <span>Pilota.</span>
+        <span class="crew-meta">Presto a bordo</span>
+      </span>
+    </div>
+    <div class="crew-card crew-soon" aria-disabled="true">
+      <img class="crew-avatar" data-crew="rose" alt="">
+      <span class="crew-text">
+        <strong>Rose Deiventi</strong>
+        <span>Navigatrice.</span>
+        <span class="crew-meta">Presto a bordo</span>
+      </span>
+    </div>
+  </div>
+  <p class="home-note" id="homeCode"></p>
+</section>
+
+<!-- ================= Barra della presentazione (solo per la demo) ================= -->
+<nav class="tour" aria-label="Percorso della presentazione">
+  <span class="tour-label">Presentazione</span>
+  <div class="tour-steps" id="tourSteps"></div>
+  <div class="tour-actions">
+    <button type="button" class="tour-btn tour-ghost" id="tourRestart">Ricomincia</button>
+    <button type="button" class="tour-btn tour-next" id="tourNext">Tappa successiva <span aria-hidden="true">›</span></button>
+  </div>
+</nav>
+
+<!-- ================= Finta piattaforma aziendale (solo sfondo) ================= -->
+<div class="desk" aria-hidden="false">
+  <header class="desk-top"><span class="desk-logo"></span><span>[Piattaforma aziendale]</span></header>
+  <div class="desk-body">
+    <nav class="desk-side" aria-hidden="true"><i></i><i></i><i></i><i></i></nav>
+    <main class="desk-main">
+
+      <div class="desk-cards" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="desk-wide" aria-hidden="true"></div>
+    </main>
+  </div>
+</div>
+
+<!-- ================= Icona riducibile ================= -->
+<div class="launcher" id="launcher">
+  <p class="launcher-teaser" id="teaser"></p>
+  <button type="button" class="launcher-btn" id="launcherBtn" aria-label="Apri la conversazione con Fred Quenza">
+    <img class="avatar" data-asset="avatar" alt="">
+    <span class="badge" id="badge">1</span>
+  </button>
+</div>
+
+<!-- ================= Pop-up di Fred ================= -->
+<section class="popup" id="popup" aria-label="Conversazione con Fred Quenza" hidden>
+  <div class="chat-col">
+  <header class="popup-head">
+      <img class="avatar avatar-head" data-asset="avatar" alt="">
+      <div class="popup-id">
+        <strong id="charName"></strong>
+        <span id="dayLabel"></span>
+      </div>
+      <button type="button" class="icon-btn" id="minimizeBtn" aria-label="Riduci a icona">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </header>
+
+    <div class="log" id="log" aria-live="polite"></div>
+
+    <div class="composer" id="composer"></div>
+
+    <footer class="popup-foot">
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span id="privacy"></span>
+    </footer>
+  </div>
+
+  <!-- Area dello schema: visibile solo nella modalità con AI su schermi larghi -->
+  <div class="canvas-col" id="canvasCol" hidden>
+    <div class="canvas-bar">
+      <div class="canvas-title">
+        <strong id="canvasTitle">Schema del processo</strong>
+        <span id="canvasVersion"></span>
+      </div>
+      <div class="seg" role="group" aria-label="Tipo di vista">
+        <button type="button" class="seg-btn" id="viewSimple" aria-pressed="false">Schema semplice</button>
+        <button type="button" class="seg-btn" id="viewBpmn" aria-pressed="true">Editor BPMN</button>
+      </div>
+      <div class="canvas-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="exportSvg" disabled>Scarica SVG</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="exportCopy" disabled>Copia XML</button>
+        <button type="button" class="btn btn-primary btn-sm" id="exportBpmn" disabled>Scarica BPMN</button>
+      </div>
+    </div>
+    <p class="canvas-note" id="canvasNote" hidden></p>
+    <div class="canvas-body">
+      <div class="canvas-empty" id="canvasEmpty">
+        <p>Lo schema comparirà qui dopo la tua prima descrizione.</p>
+        <p>Nell'editor BPMN potrai anche spostare i blocchi, rinominarli e aggiungere collegamenti: Fred terrà conto delle tue modifiche.</p>
+      </div>
+      <div class="canvas-simple" id="canvasSimple" hidden></div>
+      <div class="canvas-bpmn is-off" id="canvasBpmn"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Schema grande ================= -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <header class="modal-head">
+      <div>
+        <h2 id="modalTitle"></h2>
+        <p id="modalHint">Schema ricostruito dalle risposte dei colleghi.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="bpmnCopy">Copia XML BPMN</button>
+        <button type="button" class="btn btn-primary" id="bpmnDownload">Scarica BPMN</button>
+      <button type="button" class="icon-btn icon-btn-dark" id="modalClose" aria-label="Chiudi lo schema">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+      </div>
+    </header>
+    <div class="modal-body">
+      <div class="modal-diagram" id="modalDiagram"></div>
+      <aside class="modal-notes" id="modalNotes"></aside>
+    </div>
+  </div>
+</div>
+
+<script src="safe-console.js"></script>
+<script src="config.js"></script>
+<script src="flow.js"></script>
+<script src="diagram.js"></script>
+<script src="bpmn-export.js"></script>
+<script src="llm.js"></script>
+<script src="bpmn-sync.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1189,6 +1189,173 @@
   homeEl.querySelectorAll("[data-crew]").forEach((img) => {
     img.src = { alfly: ASSETS.alflyAvatar, ally: ASSETS.allyAvatar, rose: ASSETS.roseAvatar }[img.dataset.crew] || ASSETS.avatar;
   });
+  /* ---------------- Rose Deiventi: problemi emersi e progetti per risolverli ----------------
+     I dati arrivano dalla scheda "Progetti" del foglio Google (tramite lo script).
+     Se non arrivano (nessuna rete, script non aggiornato, scheda vuota) si usa l'ultima
+     versione vista su questo telefono; se non c'è nemmeno quella, un esempio. */
+  const roseEl = document.getElementById("rose");
+  const ROSE_CACHE = "alvolo-progetti", ROSE_VIEW = "alvolo-rose-vista";
+  const ROSE_ESEMPIO = [
+    { problema: "Attese lunghe per avere il materiale quando non è a magazzino", progetto: "Scorta minima per i materiali più richiesti",
+      completamento: 60, prossimo_passo: "Prova su due reparti", aggiornato_il: "", segnalazioni: 7 },
+    { problema: "La stessa richiesta viene scritta due volte, su carta e sul portale", progetto: "Un solo modulo di richiesta sul portale",
+      completamento: 25, prossimo_passo: "Raccolta dei campi necessari con i capi reparto", aggiornato_il: "", segnalazioni: 5 },
+    { problema: "Non è chiaro a chi rivolgersi quando manca il capo reparto", progetto: "Referente sostituto indicato in ogni turno",
+      completamento: 100, stato: "Completato", prossimo_passo: "", aggiornato_il: "", segnalazioni: 4 },
+    { problema: "La merce in arrivo resta ferma prima del controllo", progetto: "Fascia oraria dedicata al controllo della merce",
+      completamento: 0, prossimo_passo: "Analisi dei tempi di arrivo", aggiornato_il: "", segnalazioni: 3 }
+  ];
+  const rose = { list: null, source: "", filter: "tutti", view: "barre" };
+  try { rose.view = localStorage.getItem(ROSE_VIEW) === "cerchi" ? "cerchi" : "barre"; } catch (e) { /* niente memoria */ }
+
+  function pctOf(p) {
+    const n = parseFloat(String(p.completamento == null ? "" : p.completamento).replace(",", ".").replace("%", ""));
+    return isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 0;
+  }
+  function stateOf(p) {
+    const pct = pctOf(p);
+    const kind = pct >= 100 ? "done" : pct <= 0 ? "idle" : "run";
+    const label = String(p.stato || "").trim() || { done: "Completato", idle: "Da avviare", run: "In corso" }[kind];
+    return { pct: pct, kind: kind, label: label, icon: { done: "✓", idle: "○", run: "→" }[kind] };
+  }
+  function ringSvg(pct) {
+    const r = 30, c = 2 * Math.PI * r;
+    return '<svg viewBox="0 0 72 72" aria-hidden="true"><circle class="trk" cx="36" cy="36" r="' + r + '" fill="none" stroke-width="7"/>' +
+      '<circle class="val" cx="36" cy="36" r="' + r + '" fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray="' + c.toFixed(2) +
+      '" stroke-dashoffset="' + c.toFixed(2) + '" data-off="' + (c * (1 - pct / 100)).toFixed(2) + '"/></svg>';
+  }
+  function renderRose() {
+    const list = rose.list || [];
+    const st = list.map(stateOf);
+    const done = st.filter((s) => s.kind === "done").length;
+    const avg = list.length ? Math.round(st.reduce((a, s) => a + s.pct, 0) / list.length) : 0;
+    document.getElementById("roseStats").innerHTML =
+      '<div class="stat"><b>' + list.length + '</b><span>progetti</span></div>' +
+      '<div class="stat"><b>' + done + '</b><span>completati</span></div>' +
+      '<div class="stat"><b>' + avg + '%</b><span>avanzamento medio</span></div>';
+    const src = document.getElementById("roseSource");
+    src.textContent = rose.source;
+    src.classList.toggle("is-example", rose.isExample);
+    roseEl.querySelectorAll("#roseFilter button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.f === rose.filter)));
+    roseEl.querySelectorAll("#roseView button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === rose.view)));
+
+    const box = document.getElementById("roseList");
+    box.innerHTML = "";
+    const shown = list.map((p, i) => ({ p: p, s: st[i] })).filter((x) =>
+      rose.filter === "tutti" || (rose.filter === "fatti" ? x.s.kind === "done" : x.s.kind !== "done"));
+    if (!shown.length) {
+      box.appendChild(el("div", "rose-empty", list.length ? "Nessun progetto in questo gruppo." : "Non ci sono ancora progetti da mostrare."));
+      return;
+    }
+    shown.forEach(({ p, s }) => {
+      const card = el("article", "proj is-" + s.kind);
+      card.setAttribute("aria-label", (p.progetto || "Progetto") + ": " + s.pct + "% completato, " + s.label);
+      const top = el("div", "proj-top");
+      const txt = el("div", "proj-text");
+      txt.appendChild(el("span", "proj-kicker", "Problema emerso"));
+      txt.appendChild(el("p", "proj-problem", p.problema || ""));
+      txt.appendChild(el("h2", "proj-title", p.progetto || ""));
+      if (rose.view === "cerchi") {
+        const ring = el("div", "ring");
+        ring.innerHTML = ringSvg(s.pct);
+        ring.appendChild(el("span", "pct", s.pct + "%"));
+        top.appendChild(txt); top.appendChild(ring);
+        card.appendChild(top);
+      } else {
+        top.appendChild(txt);
+        card.appendChild(top);
+        const row = el("div", "proj-bar");
+        const bar = el("div", "bar"); const fill = el("i"); fill.style.width = "0%"; fill.dataset.w = s.pct + "%";
+        bar.appendChild(fill); row.appendChild(bar); row.appendChild(el("span", "pct", s.pct + "%"));
+        card.appendChild(row);
+      }
+      const meta = el("div", "proj-meta");
+      meta.appendChild(el("span", "badge-st", s.icon + " " + s.label));
+      const n = parseInt(p.segnalazioni, 10);
+      if (n > 0) meta.appendChild(el("span", null, "Segnalato da " + n + (n === 1 ? " collega" : " colleghi")));
+      if (p.aggiornato_il) meta.appendChild(el("span", null, "Aggiornato il " + p.aggiornato_il));
+      card.appendChild(meta);
+      if (p.prossimo_passo && s.kind !== "done") {
+        const nx = el("p", "proj-next"); nx.appendChild(el("b", null, "Prossimo passo: ")); nx.appendChild(document.createTextNode(p.prossimo_passo));
+        card.appendChild(nx);
+      }
+      box.appendChild(card);
+    });
+    // le barre e i cerchi si riempiono dopo il disegno
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      box.querySelectorAll(".bar i").forEach((f) => { f.style.width = f.dataset.w; });
+      box.querySelectorAll(".ring .val").forEach((c) => { c.setAttribute("stroke-dashoffset", c.dataset.off); });
+    }));
+  }
+  function setRoseList(list, source, isExample) {
+    rose.list = list; rose.source = source; rose.isExample = !!isExample;
+    if (!roseEl.hidden) renderRose();
+    updateRoseMeta();
+  }
+  function updateRoseMeta() {
+    const meta = document.getElementById("roseMeta");
+    if (!meta || !rose.list || rose.isExample) return;
+    const open = rose.list.filter((p) => pctOf(p) < 100).length;
+    meta.textContent = rose.list.length + " progetti, " + open + " in corso";
+  }
+  function loadRoseCache() {
+    const cached = load(ROSE_CACHE, null);
+    if (cached && Array.isArray(cached.progetti) && cached.progetti.length) {
+      setRoseList(cached.progetti, "Ultimo aggiornamento ricevuto il " + cached.ricevuto + ". Sto controllando se ci sono novità…", false);
+    } else {
+      setRoseList(ROSE_ESEMPIO, "Esempio: i progetti veri compariranno qui quando il gruppo di progetto compila la scheda “Progetti” del foglio.", true);
+    }
+  }
+  async function fetchRose() {
+    if (!endpointOk()) { loadRoseCache(); return; }
+    try {
+      const res = await fetch(PILOT.endpoint + "?progetti=1", { method: "GET", cache: "no-store" });
+      const data = await res.json();
+      if (!data || !data.ok || !Array.isArray(data.progetti)) throw new Error("risposta senza progetti");
+      const list = data.progetti.filter((p) => p && (p.progetto || p.problema));
+      if (!list.length) {
+        setRoseList(ROSE_ESEMPIO, "Esempio: la scheda “Progetti” del foglio è ancora vuota.", true);
+        return;
+      }
+      const ricevuto = new Date().toLocaleString("it-IT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+      store(ROSE_CACHE, { progetti: list, ricevuto: ricevuto });
+      setRoseList(list, "Dati del gruppo di progetto, aggiornati al " + ricevuto + ".", false);
+    } catch (err) {
+      const cached = load(ROSE_CACHE, null);
+      if (cached && Array.isArray(cached.progetti) && cached.progetti.length) {
+        setRoseList(cached.progetti, "Senza connessione: ultimo aggiornamento ricevuto il " + cached.ricevuto + ".", false);
+      } else {
+        setRoseList(ROSE_ESEMPIO, "Esempio: per ora non riesco a leggere i progetti dal foglio.", true);
+      }
+    }
+  }
+  function openRose() {
+    homeEl.hidden = true;
+    ui.popup.hidden = true;
+    roseEl.hidden = false;
+    document.getElementById("roseAvatar").src = ASSETS.roseAvatar;
+    loadRoseCache();
+    renderRose();
+    fetchRose();
+    window.scrollTo(0, 0);
+    document.getElementById("roseBack").focus({ preventScroll: true });
+    if (profile) {                // per il pilota: chi apre il cruscotto e quando
+      const q = load(QUEUE, []);
+      q.push({ data_ora: new Date().toISOString(), codice: profile.codice, divisione: profile.divisione, ruolo: profile.ruolo,
+               personaggio: "Rose Deiventi", tappa: "Cruscotto", domanda_id: "cruscotto_aperto", domanda: "", risposta: "aperto", passaggi: "" });
+      store(QUEUE, q); flush();
+    }
+  }
+  function closeRose() { roseEl.hidden = true; goHome(); }
+  homeEl.querySelector("[data-rose]").addEventListener("click", openRose);
+  document.getElementById("roseBack").addEventListener("click", closeRose);
+  roseEl.querySelectorAll("#roseFilter button").forEach((b) => b.addEventListener("click", () => { rose.filter = b.dataset.f; renderRose(); }));
+  roseEl.querySelectorAll("#roseView button").forEach((b) => b.addEventListener("click", () => {
+    rose.view = b.dataset.v; try { localStorage.setItem(ROSE_VIEW, rose.view); } catch (e) { /* niente memoria */ }
+    renderRose();
+  }));
+  roseEl.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRose(); });
+
   /* ---------------- ingresso: privacy, divisione, ruolo → codice ---------------- */
   const welcomeEl = document.getElementById("welcome");
   function setupWelcome() {

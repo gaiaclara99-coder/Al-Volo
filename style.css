@@ -275,6 +275,53 @@ body.phone .modal-box { width: 100%; height: 100dvh; max-height: none; border-ra
 body.phone .modal-head { padding-top: calc(16px + env(safe-area-inset-top, 0px)); }
 @media (hover: none) { .hint { display: none; } }
 
+/* ================= Rose Deiventi: cruscotto dei progetti ================= */
+:root { --ok: #2E7D4F; --ok-bg: #E7F3EC; --track: #ECE6DA; --idle: #7C8496; }
+.rose-back { align-self: flex-start; min-height: 44px; padding: 0 14px 0 8px; border: none; background: transparent; color: var(--navy); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.rose-back span { font-size: 24px; vertical-align: -2px; margin-right: 2px; }
+.rose-head { display: flex; gap: 14px; align-items: center; }
+.rose-head .crew-avatar { width: 64px; height: 64px; }
+.rose-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 10px; }
+.stat b { display: block; font-size: 24px; line-height: 1.1; color: var(--navy); font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; color: var(--ink2); }
+.rose-tools { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.rose-tools .seg button { font-size: 13.5px; }
+.seg { display: inline-flex; background: #fff; border: 1.5px solid var(--line); border-radius: 22px; padding: 3px; }
+.seg button { min-height: 38px; padding: 0 10px; border: none; border-radius: 18px; background: transparent; color: var(--navy); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+.rose-source { margin: -8px 0 0; font-size: 12px; color: var(--ink2); }
+.rose-source.is-example { color: var(--brass); font-weight: 600; }
+.rose-list { display: flex; flex-direction: column; gap: 12px; }
+.proj { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.proj-top { display: flex; gap: 14px; align-items: center; }
+.proj-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.proj-kicker { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink2); }
+.proj-problem { margin: 0; font-size: 14px; line-height: 1.4; color: var(--ink2); }
+.proj-title { margin: 0; font-size: 16px; line-height: 1.35; color: var(--navy); }
+.proj-bar { display: flex; align-items: center; gap: 10px; }
+.bar { flex: 1; height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 5px; background: var(--brass-line); transition: width .8s ease; }
+.proj.is-done .bar i { background: var(--ok); }
+.proj.is-idle .bar i { background: var(--idle); }
+.pct { font-size: 15px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.ring { flex-shrink: 0; width: 72px; height: 72px; position: relative; }
+.ring svg { width: 72px; height: 72px; transform: rotate(-90deg); }
+.ring .trk { stroke: var(--track); }
+.ring .val { stroke: var(--brass-line); transition: stroke-dashoffset .8s ease; }
+.proj.is-done .ring .val { stroke: var(--ok); }
+.proj.is-idle .ring .val { stroke: var(--idle); }
+.ring .pct { position: absolute; inset: 0; display: grid; place-items: center; min-width: 0; font-size: 15px; }
+.proj-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13px; color: var(--ink2); }
+.badge-st { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #F6EBD7; color: var(--brass); }
+.proj.is-done .badge-st { background: var(--ok-bg); color: var(--ok); }
+.proj.is-idle .badge-st { background: #EEF0F3; color: #4F5666; }
+.proj-next { margin: 0; font-size: 14px; line-height: 1.4; color: var(--navy); }
+.proj-next b { font-weight: 600; }
+.rose-empty { background: #fff; border: 1px dashed var(--line); border-radius: 14px; padding: 18px; font-size: 14px; color: var(--ink2); text-align: center; }
+@media (min-width: 761px) { body.pilot .rose-dash:not([hidden]) { max-width: 640px; } }
+@media (prefers-reduced-motion: reduce) { .bar i, .ring .val { transition: none; } }
+
 /* ================= pilota ================= */
 body.pilot .welcome:not([hidden]) { display: flex; flex-direction: column; gap: 16px; min-height: 100dvh; padding: calc(24px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
 .welcome-text { margin: 0; font-size: 15px; line-height: 1.5; color: var(--navy); background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }

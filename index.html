@@ -53,16 +53,42 @@
         <span class="crew-meta">Presto a bordo</span>
       </span>
     </div>
-    <div class="crew-card crew-soon" aria-disabled="true">
+    <button type="button" class="crew-card" data-rose>
       <img class="crew-avatar" data-crew="rose" alt="">
       <span class="crew-text">
         <strong>Rose Deiventi</strong>
-        <span>Navigatrice.</span>
-        <span class="crew-meta">Presto a bordo</span>
+        <span>Navigatrice. Ti aggiorna sui problemi emersi e sui progetti per risolverli.</span>
+        <span class="crew-meta" id="roseMeta">Apri la rotta dei progetti</span>
       </span>
-    </div>
+    </button>
   </div>
   <p class="home-note" id="homeCode"></p>
+</section>
+
+<!-- ================= Rose Deiventi: problemi emersi e progetti ================= -->
+<section class="home rose-dash" id="rose" hidden aria-labelledby="roseTitle">
+  <button type="button" class="rose-back" id="roseBack"><span aria-hidden="true">‹</span> Equipaggio</button>
+  <header class="home-head rose-head">
+    <img class="crew-avatar" id="roseAvatar" alt="">
+    <div>
+      <h1 id="roseTitle">Rose Deiventi</h1>
+      <p>Navigatrice. Ecco i problemi emersi dalle risposte dei colleghi e a che punto sono i progetti per risolverli.</p>
+    </div>
+  </header>
+  <div class="rose-stats" id="roseStats"></div>
+  <div class="rose-tools">
+    <div class="seg" role="group" aria-label="Filtra i progetti" id="roseFilter">
+      <button type="button" data-f="tutti" aria-pressed="true">Tutti</button>
+      <button type="button" data-f="corso" aria-pressed="false">In corso</button>
+      <button type="button" data-f="fatti" aria-pressed="false">Completati</button>
+    </div>
+    <div class="seg" role="group" aria-label="Come mostrare l'avanzamento" id="roseView">
+      <button type="button" data-v="barre" aria-pressed="true">Barre</button>
+      <button type="button" data-v="cerchi" aria-pressed="false">Cerchi</button>
+    </div>
+  </div>
+  <p class="rose-source" id="roseSource" role="status"></p>
+  <div class="rose-list" id="roseList"></div>
 </section>
 
 <!-- ================= Barra della presentazione (solo per la demo) ================= -->

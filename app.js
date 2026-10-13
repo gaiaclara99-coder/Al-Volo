@@ -477,8 +477,160 @@
     });
   }
 
+  /* ---------------- la mappa nasce dalle parole della persona ----------------
+     "steps": la persona scrive i passaggi uno alla volta; ognuno diventa un riquadro, testo invariato.
+     "assignRoles": per ogni passaggio indica chi lo fa; i ruoli diventano le colonne della mappa. */
+  function splitSteps(text) {
+    return String(text).split(/\r?\n|;/)
+      .map((s) => s.replace(/^\s*(?:\d+\s*[.)\-:]|[-•*–])\s*/, "").trim())
+      .filter(Boolean);
+  }
+  function askSteps(q) {
+    return new Promise((resolve) => {
+      clearComposer();
+      const steps = [];
+      const list = el("ol", "steps-list");
+      const row = el("div", "input-row");
+      const inp = el("input", "step-input");
+      inp.type = "text"; inp.enterKeyHint = "next"; inp.setAttribute("aria-label", "Nuovo passaggio");
+      const add = el("button", "send"); add.type = "button"; add.setAttribute("aria-label", "Aggiungi il passaggio");
+      add.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+      row.appendChild(inp); row.appendChild(add);
+      const done = el("button", "btn btn-primary", q.doneLabel || "Ho finito"); done.type = "button";
+      const hint = el("div", "steps-hint", q.hint || "");
+      const redraw = () => {
+        list.innerHTML = "";
+        steps.forEach((s, i) => {
+          const li = el("li");
+          li.appendChild(el("span", "n", String(i + 1)));
+          li.appendChild(el("span", "t", s));
+          const x = el("button", "x", "✕"); x.type = "button"; x.setAttribute("aria-label", "Togli il passaggio " + (i + 1));
+          x.addEventListener("click", () => { steps.splice(i, 1); redraw(); inp.focus({ preventScroll: true }); });
+          li.appendChild(x);
+          list.appendChild(li);
+        });
+        list.hidden = !steps.length;
+        inp.placeholder = "Passaggio " + (steps.length + 1) + "…";
+        add.disabled = !inp.value.trim();
+        done.disabled = steps.length < 2 && !(steps.length === 1 && inp.value.trim());
+        list.scrollTop = list.scrollHeight;
+        scrollDown();
+      };
+      const push = () => { splitSteps(inp.value).forEach((s) => steps.push(s)); inp.value = ""; redraw(); inp.focus({ preventScroll: true }); };
+      inp.addEventListener("input", redraw);
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (inp.value.trim()) push(); } });
+      inp.addEventListener("paste", (e) => {
+        const t = (e.clipboardData || window.clipboardData).getData("text");
+        if (/\n/.test(t)) { e.preventDefault(); inp.value = t; push(); }
+      });
+      add.addEventListener("click", () => { if (inp.value.trim()) push(); });
+      done.addEventListener("click", () => {
+        if (inp.value.trim()) splitSteps(inp.value).forEach((s) => steps.push(s));
+        if (steps.length >= 2) resolve(steps.slice());
+      });
+      ui.composer.appendChild(hint); ui.composer.appendChild(list); ui.composer.appendChild(row); ui.composer.appendChild(done);
+      redraw();
+      inp.focus({ preventScroll: true });
+    });
+  }
+  function procFromSteps(steps) {
+    const nodes = steps.map((s, i) => ({ id: "p" + (i + 1), type: i === 0 ? "start" : i === steps.length - 1 ? "end" : "task",
+                                         lane: 0, status: "confirmed", label: s }));
+    const edges = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id }));
+    const t = String(PILOT.attivita || "Attività");
+    return FredDiagram.autoLayout({ title: t.charAt(0).toUpperCase() + t.slice(1), lanes: ["Da indicare"], nodes: nodes, edges: edges });
+  }
+  function askRoles(q, proc) {
+    return new Promise((resolve) => {
+      const order = proc.nodes.slice();
+      const roles = [];
+      const chosen = [];
+      let i = 0;
+      const step = () => {
+        clearComposer();
+        const n = order[i];
+        const box = el("div", "role-step");
+        box.appendChild(el("small", null, "Passaggio " + (i + 1) + " di " + order.length));
+        box.appendChild(document.createTextNode(n.label));
+        ui.composer.appendChild(box);
+        const chips = el("div", "chips");
+        roles.concat([q.noneLabel || "Non saprei"]).forEach((r) => {
+          const c = el("button", "chip", r); c.type = "button";
+          c.addEventListener("click", () => pick(r));
+          chips.appendChild(c);
+        });
+        ui.composer.appendChild(chips);
+        if (roles.length) { const lab = el("div", "field-label", "Oppure scrivilo tu"); ui.composer.appendChild(lab); }
+        const row = el("div", "input-row");
+        const inp = el("input", "step-input"); inp.type = "text"; inp.placeholder = q.placeholder || "Scrivi il ruolo…";
+        inp.setAttribute("aria-label", "Chi fa questo passaggio");
+        const ok = el("button", "send"); ok.type = "button"; ok.disabled = true; ok.setAttribute("aria-label", "Conferma il ruolo");
+        ok.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        inp.addEventListener("input", () => { ok.disabled = !inp.value.trim(); });
+        inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (inp.value.trim()) pick(inp.value.trim()); } });
+        ok.addEventListener("click", () => { if (inp.value.trim()) pick(inp.value.trim()); });
+        row.appendChild(inp); row.appendChild(ok); ui.composer.appendChild(row);
+        if (i > 0) {
+          const back = el("button", "link-btn role-back", "‹ Passaggio precedente"); back.type = "button";
+          back.addEventListener("click", () => { i--; chosen.pop(); step(); });
+          ui.composer.appendChild(back);
+        }
+        if (!roles.length) inp.focus({ preventScroll: true });
+        scrollDown();
+      };
+      const pick = (r) => {
+        const same = roles.find((x) => x.toLowerCase() === r.toLowerCase());
+        if (!same && r !== (q.noneLabel || "Non saprei")) roles.push(r);
+        chosen.push(same || r);
+        i++;
+        if (i < order.length) step(); else resolve(chosen.slice());
+      };
+      step();
+    });
+  }
+
   async function askQuestion(run, q, ctx) {
     const text = fill(q.text, { passaggio: ctx.node ? ctx.node.label : "" });
+    if (q.type === "steps") {
+      await fredSay(text, run);
+      const steps = await askSteps(q);
+      guard(run); clearComposer();
+      addMsg("user", steps.map((s, i) => (i + 1) + ". " + s).join("\n"), "msg-list");
+      saveAnswer(q.id, steps.join("\n"));
+      if (PILOT.mappaDaRacconto !== false) {
+        ctx.proc = procFromSteps(steps);
+        ctx.built = true;
+        state.memory.proc = ctx.proc;
+        saveProgress();
+      }
+      return;
+    }
+    if (q.type === "assignRoles") {
+      if (!ctx.built) return askQuestion(run, Object.assign({}, q, { type: "selectSteps",
+        text: "Collocale nella mappa: tocca i passaggi in cui intervengono, poi premi «Fatto»." }), ctx);
+      await fredSay(text, run);
+      const chosen = await askRoles(q, ctx.proc);
+      guard(run); clearComposer();
+      const p = clone(ctx.proc);
+      const lanes = [];
+      p.nodes.forEach((n, k) => {
+        const r = chosen[k] === (q.noneLabel || "Non saprei") ? "Non indicato" : chosen[k];
+        let li = lanes.indexOf(r);
+        if (li < 0) { lanes.push(r); li = lanes.length - 1; }
+        n.lane = li;
+      });
+      p.lanes = lanes;
+      ctx.proc = FredDiagram.autoLayout(p);
+      state.memory.proc = ctx.proc;
+      addMsg("user", p.nodes.map((n) => "“" + n.label + "”: " + lanes[n.lane]).join("\n"), "msg-list");
+      saveAnswer(q.id, JSON.stringify(p.nodes.map((n) => ({ passaggio: n.label, ruolo: lanes[n.lane] }))));
+      saveAnswer("schema_iniziale", JSON.stringify({ title: p.title, lanes: p.lanes,
+        nodes: p.nodes.map((n) => ({ id: n.id, type: n.type, lane: n.lane, label: n.label })),
+        edges: p.edges.map((e) => ({ from: e.from, to: e.to, label: e.label || "" })) }));
+      await fredSay("Ecco la mappa con i tuoi passaggi e le tue parole.", run);
+      diagramCard({ proc: ctx.proc });
+      return;
+    }
     if (q.type === "selectStep" || q.type === "selectSteps") {
       await fredSay(text, run);
       const nodes = await pickSteps(q, ctx.proc, q.type === "selectSteps");
@@ -554,6 +706,7 @@
     let shown = false;
     for (const q of qs) {
       if (!shown && ["selectStep", "selectSteps", "mapChange"].includes(q.type)) { diagramCard({ proc: ctx.proc }); shown = true; }
+      if (q.type === "assignRoles") shown = true;      // la mappa compare alla fine dell'assegnazione
       await askQuestion(run, q, ctx);
     }
     if (followUp) state.memory.answers2 = collected.join("\n");
@@ -886,7 +1039,8 @@
     const mine = state.memory.proc;
     const proc = FredDiagram.autoLayout(clone(mine || FLOW.process));
     proc.nodes.forEach((n) => { delete n.isNew; });
-    const greeting = (mine && ses.greetingIfChange) ? ses.greetingIfChange : ses.greeting;
+    const edited = mine && state.memory.lastChange && state.memory.lastChange.edits;
+    const greeting = (edited && ses.greetingIfChange) ? ses.greetingIfChange : ses.greeting;
 
     if (ses.approval) {
       for (const line of greeting) await fredSay(line, run);

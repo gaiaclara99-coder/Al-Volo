@@ -43,9 +43,11 @@ window.FRED_FLOW = {
       "questions": [
         {
           "id": "racconto",
-          "type": "open",
+          "type": "steps",
           "text": "Puoi descrivere {attivita} passaggio per passaggio, dall'inizio alla fine?",
-          "placeholder": "Scrivi qui…"
+          "hint": "Scrivi un passaggio alla volta e premi Invio: ognuno diventa un riquadro della mappa, con le tue parole.",
+          "placeholder": "Passaggio 1…",
+          "doneLabel": "Ho finito"
         },
         {
           "id": "persone",
@@ -55,9 +57,10 @@ window.FRED_FLOW = {
         },
         {
           "id": "persone-mappa",
-          "type": "selectSteps",
-          "text": "Collocale nella mappa: tocca i passaggi in cui intervengono, poi premi «Fatto».",
+          "type": "assignRoles",
+          "text": "Collocale nella mappa: per ogni passaggio, indica chi lo fa.",
           "noneLabel": "Non saprei",
+          "placeholder": "Scrivi il ruolo…",
           "doneLabel": "Fatto"
         },
         {

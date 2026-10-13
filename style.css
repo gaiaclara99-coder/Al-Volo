@@ -173,6 +173,18 @@ body { padding-top: var(--tour-h); }
 .send { width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 10px; background: var(--brass); color: #fff; display: grid; place-items: center; cursor: pointer; }
 .send:disabled { opacity: .4; cursor: not-allowed; }
 .hint { font-size: 12px; color: var(--ink2); }
+/* elenco dei passaggi scritti dalla persona */
+.steps-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 38vh; overflow-y: auto; }
+.steps-list li { display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 10px; background: #fff; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; line-height: 1.35; }
+.steps-list .n { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--navy); color: #fff; font-size: 12px; font-weight: 700; }
+.steps-list .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.steps-list .x { flex-shrink: 0; width: 36px; height: 36px; border: none; border-radius: 8px; background: transparent; color: var(--ink2); font-size: 18px; cursor: pointer; }
+.steps-list .x:hover { background: #F1EEE6; }
+.input-row input.step-input { flex: 1; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1.5px solid #C9C2B4; background: #fff; color: var(--navy); font-size: 16px; }
+.role-step { padding: 10px 12px; background: #fff; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; line-height: 1.4; }
+.role-step small { display: block; font-size: 12px; color: var(--ink2); margin-bottom: 2px; }
+.role-back { align-self: flex-start; }
+.steps-hint { font-size: 13px; line-height: 1.4; color: var(--ink2); }
 .link-btn { align-self: flex-start; background: none; border: none; padding: 6px 0; color: var(--navy); text-decoration: underline; font-size: 14px; cursor: pointer; min-height: 32px; }
 
 .popup-foot { border-top: 1px solid #E4DED2; padding: 9px 16px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); }

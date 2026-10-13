@@ -1363,15 +1363,18 @@
   const roseEl = document.getElementById("rose");
   const ROSE_CACHE = "alvolo-progetti", ROSE_VIEW = "alvolo-rose-vista";
   const ROSE_ESEMPIO = [
-    { problema: "Attese lunghe per avere il materiale quando non è a magazzino", progetto: "Scorta minima per i materiali più richiesti",
-      completamento: 60, prossimo_passo: "Prova su due reparti", aggiornato_il: "", segnalazioni: 7 },
-    { problema: "La stessa richiesta viene scritta due volte, su carta e sul portale", progetto: "Un solo modulo di richiesta sul portale",
-      completamento: 25, prossimo_passo: "Raccolta dei campi necessari con i capi reparto", aggiornato_il: "", segnalazioni: 5 },
-    { problema: "Non è chiaro a chi rivolgersi quando manca il capo reparto", progetto: "Referente sostituto indicato in ogni turno",
-      completamento: 100, stato: "Completato", prossimo_passo: "", aggiornato_il: "", segnalazioni: 4 },
-    { problema: "La merce in arrivo resta ferma prima del controllo", progetto: "Fascia oraria dedicata al controllo della merce",
-      completamento: 0, prossimo_passo: "Analisi dei tempi di arrivo", aggiornato_il: "", segnalazioni: 3 }
+    { problema: "I documenti di un acquisto sono sparsi tra mail, cartelle condivise e gestionale", progetto: "Un'unica interfaccia per trovare tutti i documenti di un acquisto",
+      completamento: 55, prossimo_passo: "Prova con un primo gruppo di buyer", aggiornato_il: "", segnalazioni: 9 },
+    { problema: "Il controllo delle firme digitali su offerte e contratti si fa a mano, documento per documento", progetto: "Modello che riconosce le firme digitali nei documenti",
+      completamento: 35, stato: "In addestramento", prossimo_passo: "Addestramento del modello su un archivio di documenti di esempio", aggiornato_il: "", segnalazioni: 6 },
+    { problema: "Le richieste d'acquisto arrivano senza alcune informazioni e vanno completate più volte", progetto: "Modulo di richiesta con le informazioni necessarie già indicate",
+      completamento: 20, prossimo_passo: "Raccolta dei campi necessari con chi fa le richieste", aggiornato_il: "", segnalazioni: 7 },
+    { problema: "Non si vede a che punto è l'approvazione di un ordine", progetto: "Stato dell'approvazione visibile a chi ha fatto la richiesta",
+      completamento: 100, stato: "Completato", prossimo_passo: "", aggiornato_il: "", segnalazioni: 5 },
+    { problema: "Gli stessi dati del fornitore vengono ricopiati in più sistemi", progetto: "Anagrafica fornitori in un unico punto",
+      completamento: 0, prossimo_passo: "Mappatura dei sistemi in cui compaiono i dati dei fornitori", aggiornato_il: "", segnalazioni: 4 }
   ];
+
   const rose = { list: null, source: "", filter: "tutti", view: "barre" };
   try { rose.view = localStorage.getItem(ROSE_VIEW) === "cerchi" ? "cerchi" : "barre"; } catch (e) { /* niente memoria */ }
 

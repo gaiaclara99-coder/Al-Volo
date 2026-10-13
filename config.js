@@ -5,13 +5,13 @@
 window.AL_VOLO_PILOTA = {
 
   // 1. Indirizzo dello script di Google Fogli (passo 2 delle istruzioni): finisce con /exec
-  endpoint: "INCOLLA_QUI_L_INDIRIZZO_DELLO_SCRIPT",
+  endpoint: "https://script.google.com/macros/s/AKfycbxEgmx3_kZxXuaLo5QdqWHFrVcfF7MbrDuHQJLOsN_itojXBwILYbeemXW2WxLi9eA/exec",
 
   // 2. Chiave del pilota: deve essere UGUALE a quella scritta nello script di Google Fogli
-  chiave: "CAMBIA-QUESTA-CHIAVE",
+  chiave: "i_fratelli_Fly_sono_i_migliori",
 
   // 3. Attività su cui lavora il pilota, con l'articolo (es. "il collaudo del pezzo", "l'emissione dell'ordine")
-  attivita: "la richiesta di materiale al magazzino",
+  attivita: "il processo del procurement",
 
   // 4. Codice dei partecipanti al test: prefisso + 3 cifre casuali + suffisso (es. T123TT).
   //    Divisione e ruolo non vengono chiesti: in produzione arriveranno da Workday.

@@ -871,9 +871,9 @@
       await fredSay("Cosa vuoi fare con " + q2(node.label) + "?", run);
       const menu = [
         { k: "riscrivi", l: "Riscrivilo" },
-        { k: "elimina", l: "Eliminalo", ok: !isTerminal(node) },
-        { k: "prima", l: "Aggiungi un passaggio prima", ok: node.type !== "start" },
-        { k: "dopo", l: "Aggiungi un passaggio dopo", ok: node.type !== "end" },
+        { k: "elimina", l: "Eliminalo", ok: p.nodes.length > 2 },
+        { k: "prima", l: "Aggiungi un passaggio prima" },
+        { k: "dopo", l: "Aggiungi un passaggio dopo" },
         { k: "ruolo", l: "Cambia chi lo fa" },
         { k: "commento", l: "Lascia un commento" },
         { k: "annulla", l: "Annulla" }
@@ -892,7 +892,16 @@
         record = { azione: "riscritto", passaggio: before, testo: a.text };
         log.push("hai riscritto " + q2(before) + " come " + q2(a.text));
       } else if (pick.k === "elimina") {
+        const wasType = node.type;
+        const nextIds = p.edges.filter((e) => e.from === node.id).map((e) => e.to);
+        const prevIds = p.edges.filter((e) => e.to === node.id).map((e) => e.from);
         deleteNode(p, node.id);
+        // se era l'inizio (o la fine), il passaggio subito dopo (o prima) diventa l'inizio (o la fine)
+        if (wasType === "start") nextIds.forEach((id) => { const n = p.nodes.find((x) => x.id === id); if (n && n.type === "task") n.type = "start"; });
+        if (wasType === "end") prevIds.forEach((id) => {
+          const n = p.nodes.find((x) => x.id === id);
+          if (n && n.type === "task" && !p.edges.some((e) => e.from === id)) n.type = "end";
+        });
         record = { azione: "eliminato", passaggio: before };
         log.push("hai eliminato " + q2(before));
       } else if (pick.k === "prima" || pick.k === "dopo") {
@@ -901,7 +910,10 @@
         guard(run); clearComposer(); addMsg("user", a.text);
         const lane = await askLane(run, p, "Chi lo fa?");
         const nid = newNodeId(p);
-        p.nodes.push({ id: nid, type: "task", lane: lane, status: "confirmed", label: a.text, isNew: true });
+        let newType = "task";
+        if (pick.k === "dopo" && node.type === "end") { node.type = "task"; newType = "end"; }        // nuovo ultimo passaggio
+        if (pick.k === "prima" && node.type === "start") { node.type = "task"; newType = "start"; }   // nuovo primo passaggio
+        p.nodes.push({ id: nid, type: newType, lane: lane, status: "confirmed", label: a.text, isNew: true });
         let branch = "";
         if (pick.k === "prima") {
           p.edges.filter((e) => e.to === node.id).forEach((e) => { e.to = nid; });
@@ -1016,7 +1028,8 @@
       guard(run);
       clearComposer();
     } else {
-      for (const line of ses.greetingAgain || []) await fredSay(line, run);
+      const ga = ses.greetingAgain || [];
+      if (ga.length) await fredSay(ga[(i - 1) % ga.length], run);
       if (qs.length && !usesMap(qs[0])) diagramCard({ proc: proc });   // la mappa resta sotto gli occhi
     }
     const ctx = { ses: ses, proc: proc, node: null };

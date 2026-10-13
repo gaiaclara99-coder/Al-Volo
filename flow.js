@@ -38,7 +38,7 @@ window.FRED_FLOW = {
       "teaser": "Fred ha qualche domanda per te",
       "greeting": [
         "Ciao! Sono Fred Quenza, il radiofonista dell'equipaggio di Al Volo.",
-        "Sto raccogliendo come si svolge {attivita}, raccontata da chi la vive. Rispondi con le parole che preferisci."
+        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci."
       ],
       "questions": [
         {
@@ -111,7 +111,7 @@ window.FRED_FLOW = {
       "dayLabel": "Tappa 2 di 4",
       "teaser": "Fred ha uno schema da mostrarti",
       "greeting": [
-        "Ciao! Ecco la mappa {di_attivita}.",
+        "Radio di bordo a rapporto! Ecco la mappa {di_attivita}.",
         "Il processo così mappato è corretto?"
       ],
       "askSelect": "Segnala il passaggio errato: toccalo nella mappa.",
@@ -142,12 +142,12 @@ window.FRED_FLOW = {
       "dayLabel": "Tappa 3 di 4",
       "teaser": "Fred ha qualche altra domanda per te",
       "greeting": [
-        "Ciao, sono di nuovo Fred.",
-        "Oggi ti faccio qualche altra domanda {su_attivita}."
+        "Qui Radio di bordo, mi ricevi? Passo.",
+        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci."
       ],
       "greetingIfChange": [
-        "Ciao, sono di nuovo Fred. L'ultima volta hai modificato la mappa: {testo}.",
-        "Oggi ti faccio qualche altra domanda {su_attivita}."
+        "Qui Radio di bordo, mi ricevi? Passo. L'ultima volta hai modificato la mappa: {testo}.",
+        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci."
       ],
       "questions": [
         {
@@ -216,11 +216,11 @@ window.FRED_FLOW = {
       "dayLabel": "Tappa 4 di 4",
       "teaser": "Fred ha uno schema aggiornato da mostrarti",
       "greeting": [
-        "Ciao! Ecco lo schema {di_attivita}, aggiornato con le risposte raccolte."
+        "Contatto radio ristabilito! Ecco la mappa {di_attivita}."
       ],
       "processKey": "process",
       "greetingIfChange": [
-        "Ciao! Ecco la mappa {di_attivita} con le modifiche che hai fatto tu."
+        "Contatto radio ristabilito! Ecco la mappa {di_attivita} con le modifiche che hai fatto tu."
       ],
       "refineLine": "Con le risposte di mercoledì ho aggiunto: {summary}.",
       "thinkingPrepare": "Fred sta preparando lo schema aggiornato…",
@@ -263,7 +263,8 @@ window.FRED_FLOW = {
       // Al Fly è diviso in tappe brevi: ogni riga è una tappa, con gli id delle domande che contiene
       // (le domande di approfondimento seguono la loro domanda). Per raggrupparle, es. [["frequenza", "tempo"], …]
       "tappe": [["frequenza"], ["tempo"], ["attenzione"], ["fermo"], ["inefficienze"]],
-      "greetingAgain": ["Ciao, sono di nuovo Al Fly."],
+      // saluti delle tappe successive alla prima, uno per tappa (si ripetono in giro se le tappe sono di più)
+      "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!"],
       "closingLast": "Grazie! Per questa mappa le domande sono finite. Riparto.",
       "questions": [
         {
@@ -415,7 +416,7 @@ window.FRED_FLOW = {
   privacyNote: "Il tuo nome non viene registrato: le risposte sono legate a un codice di test.",
 
   process: {
-    title: "Richiesta di materiale al magazzino",
+    title: "Processo del procurement",
     lanes: ["Operatore di linea", "Capo reparto", "Magazzino", "Ufficio acquisti"],
     nodes: [
       { id: "s",  type: "start",    lane: 0, row: 0, status: "confirmed", label: "Si accorge che manca il materiale" },
@@ -445,7 +446,7 @@ window.FRED_FLOW = {
   // Schema aggiornato dopo la settimana 2: la variante segnalata dai colleghi diventa un ramo
   // (chi avvisa direttamente il magazzino lo fa quando il capo reparto è assente)
   process2: {
-    title: "Richiesta di materiale al magazzino",
+    title: "Processo del procurement",
     lanes: ["Operatore di linea", "Capo reparto", "Magazzino", "Ufficio acquisti"],
     nodes: [
       { id: "s",  type: "start",    lane: 0, row: 0, status: "confirmed", label: "Si accorge che manca il materiale" },

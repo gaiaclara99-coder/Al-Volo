@@ -197,6 +197,9 @@ body { padding-top: var(--tour-h); }
 .lg-var { border: 2.5px solid var(--brass-line); background: #FFF5E2; }
 .lg-ver { border: 1.5px dashed #7C8496; }
 .lg-new { border: 2.5px solid #2E7D4F; background: #ECF7F0; }
+.lg-hi { border: 2.5px solid #2E7D4F; background: #E7F3EC; }
+.lg-mid { border: 2.5px solid #B86200; background: #FFF0DC; }
+.lg-lo { border: 2.5px solid #B3261E; background: #FCE8E6; }
 .quote { margin: 0; padding: 10px 12px; border-left: 4px solid #2E7D4F; background: #ECF7F0; border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.45; color: var(--navy); }
 .quote strong { display: block; font-size: 12px; color: #2E5B3E; margin-bottom: 2px; }
 .note-new { border: 2px solid #2E7D4F; background: #ECF7F0; }
@@ -330,6 +333,16 @@ body.phone .modal-head { padding-top: calc(16px + env(safe-area-inset-top, 0px))
 .proj.is-idle .badge-st { background: #EEF0F3; color: #4F5666; }
 .proj-next { margin: 0; font-size: 14px; line-height: 1.4; color: var(--navy); }
 .proj-next b { font-weight: 600; }
+.vote { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.vote-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink2); }
+.vote-row { display: flex; gap: 8px; }
+.vote-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1.5px solid var(--line); background: #fff; color: var(--navy); font: inherit; font-size: 15px; cursor: pointer; }
+.vote-btn[aria-pressed="true"] { border-color: var(--navy); background: var(--navy); color: #fff; }
+.vote-ico { font-size: 17px; line-height: 1; }
+.vote-n { font-weight: 700; font-variant-numeric: tabular-nums; }
+.vote-text { width: 100%; min-height: 56px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid #C9C2B4; background: #fff; color: var(--navy); font: inherit; font-size: 16px; line-height: 1.4; resize: vertical; }
+.vote-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vote-note { font-size: 13px; color: var(--ok); font-weight: 600; }
 .rose-empty { background: #fff; border: 1px dashed var(--line); border-radius: 14px; padding: 18px; font-size: 14px; color: var(--ink2); text-align: center; }
 @media (min-width: 761px) { body.pilot .rose-dash:not([hidden]) { max-width: 640px; } }
 @media (prefers-reduced-motion: reduce) { .bar i, .ring .val { transition: none; } }

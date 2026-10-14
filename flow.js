@@ -64,6 +64,17 @@ window.FRED_FLOW = {
           "doneLabel": "Fatto"
         },
         {
+          "id": "ruolo-focus",
+          "type": "pickRole",
+          "text": "Quale ruolo vuoi analizzare?"
+        },
+        {
+          "id": "attivita-focus",
+          "type": "pickActivity",
+          "text": "Quale delle attività di «{ruolo}» vuoi approfondire? Toccala nella mappa o scegli qui sotto.",
+          "intro": "Approfondiamo «{passaggio}»."
+        },
+        {
           "id": "aggiunte",
           "type": "open",
           "optional": true,
@@ -143,11 +154,11 @@ window.FRED_FLOW = {
       "teaser": "Fred ha qualche altra domanda per te",
       "greeting": [
         "Qui Radio di bordo, mi ricevi? Passo.",
-        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci."
+        "Riprendiamo da «{focus}»."
       ],
       "greetingIfChange": [
         "Qui Radio di bordo, mi ricevi? Passo. L'ultima volta hai modificato la mappa: {testo}.",
-        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci."
+        "Riprendiamo da «{focus}»."
       ],
       "questions": [
         {
@@ -259,7 +270,12 @@ window.FRED_FLOW = {
       "greeting": [
         "Ciao! Sono Al Fly, il pilota di Al Volo."
       ],
-      "intro": "Questa è la mappa {di_attivita}, confermata da te e dai colleghi.",
+      "intro": "Questa mappa unisce le mappe {di_attivita} di {n} colleghi, tu compreso. Il colore dice in quante mappe compare ogni passaggio: verde in quasi tutte, arancio in alcune, rosso in poche.",
+      "introAlone": "Questa è la mappa {di_attivita}. Per ora è l'unica confermata: quando arriveranno quelle dei colleghi, qui le vedrai unite.",
+      "thinkingAggregate": "Al Fly sta unendo le mappe dei colleghi…",
+      "askEdit": "Vuoi modificare qualcosa in questa mappa?",
+      // quota di mappe in cui deve comparire un passaggio per essere verde (alta) o arancio (media); sotto è rosso
+      "soglie": { "alta": 0.75, "media": 0.4 },
       // Al Fly è diviso in tappe brevi: ogni riga è una tappa, con gli id delle domande che contiene
       // (le domande di approfondimento seguono la loro domanda). Per raggrupparle, es. [["frequenza", "tempo"], …]
       "tappe": [["frequenza"], ["tempo"], ["attenzione"], ["fermo"], ["inefficienze"]],

@@ -281,11 +281,17 @@
     const card = el("div", "diagram-card");
     if (opts.version) card.appendChild(el("div", "version", proc.title + ", versione " + opts.version));
     const sc = el("div", "diagram-scroll");
-    sc.appendChild(FredDiagram.render(proc, { size: "compact", onSelect: opts.onSelect, selectedId: opts.selectedId,
-                                              selectedIds: opts.selectedIds }));
+    // il ruolo scelto da approfondire resta evidenziato nella mappa intera (tranne nella mappa aggregata)
+    if (opts.highlightLane === undefined && state.memory.focus && !proc.aggregated) {
+      const li = proc.lanes.indexOf(state.memory.focus.ruolo);
+      if (li >= 0) opts.highlightLane = li;
+    }
+    const view = () => ({ size: "compact", onSelect: opts.onSelect, highlightLane: opts.highlightLane,
+                          dimOthers: opts.dimOthers, selectableIds: opts.selectableIds });
+    sc.appendChild(FredDiagram.render(proc, Object.assign(view(), { selectedId: opts.selectedId, selectedIds: opts.selectedIds })));
     card._redraw = (ids) => {
       sc.innerHTML = "";
-      sc.appendChild(FredDiagram.render(proc, { size: "compact", onSelect: opts.onSelect, selectedIds: ids }));
+      sc.appendChild(FredDiagram.render(proc, Object.assign(view(), { selectedIds: ids })));
     };
     // dopo la scelta lo schema non è più toccabile: niente tocchi "a vuoto" sulle mappe precedenti
     card._freeze = (ids) => { opts.onSelect = null; card._redraw(ids || []); };
@@ -605,6 +611,42 @@
       }
       return;
     }
+    if (q.type === "pickRole") {
+      // dopo la mappa dell'intero processo si analizza il lavoro di un solo ruolo
+      const lanes = ctx.proc.lanes.filter((l, i) => l !== "Non indicato" && ctx.proc.nodes.some((n) => n.lane === i));
+      if (!lanes.length) return;
+      await fredSay(text, run);
+      let role = lanes[0];
+      if (lanes.length > 1) { const k = await choose(lanes); guard(run); clearComposer(); role = lanes[k]; }
+      addMsg("user", role);
+      ctx.role = role;
+      state.memory.focus = { ruolo: role };
+      saveAnswer(q.id, role);
+      return;
+    }
+    if (q.type === "pickActivity") {
+      const role = ctx.role || (state.memory.focus || {}).ruolo;
+      const li = ctx.proc.lanes.indexOf(role);
+      const nodes = ctx.proc.nodes.filter((n) => n.lane === li);
+      if (!nodes.length) return;
+      let node = nodes[0];
+      if (nodes.length > 1) {
+        await fredSay(fill(q.text, { ruolo: role }), run);
+        let card = null;
+        node = await new Promise((resolve) => {
+          card = diagramCard({ proc: ctx.proc, highlightLane: li, dimOthers: true, selectableIds: nodes.map((n) => n.id), onSelect: resolve });
+          choose(nodes.map((n) => n.label)).then((k) => resolve(nodes[k]));
+        });
+        guard(run); clearComposer();
+        if (card) card._freeze([node.id]);
+        addMsg("user", "“" + node.label + "”");
+      }
+      state.memory.focus = { ruolo: role, id: node.id, label: node.label };
+      saveAnswer(q.id, node.id, node.label);
+      saveProgress();
+      if (q.intro) await fredSay(fill(q.intro, { passaggio: node.label }), run);
+      return;
+    }
     if (q.type === "assignRoles") {
       if (!ctx.built) return askQuestion(run, Object.assign({}, q, { type: "selectSteps",
         text: "Collocale nella mappa: tocca i passaggi in cui intervengono, poi premi «Fatto»." }), ctx);
@@ -691,6 +733,8 @@
         .concat(ses.questions);   // prima le domande sul suo caso, poi tutte quelle della tappa
     }
     const collected = [];
+    const focus = state.memory.focus && state.memory.focus.label;
+    greeting = greeting.filter((l) => focus || l.indexOf("{focus}") < 0).map((l) => fill(l, { focus: focus || "" }));
     for (const line of greeting) await fredSay(line, run);
     guard(run);
     await new Promise((resolve) => actions([
@@ -888,7 +932,7 @@
         await fredSay("Scrivilo con le tue parole: comparirà nella mappa esattamente così.", run);
         const a = await askText({ value: node.label, placeholder: "Scrivi qui…" });
         guard(run); clearComposer(); addMsg("user", a.text);
-        node.label = a.text; node.status = "confirmed"; delete node.note; node.isNew = true;
+        node.label = a.text; node.status = "confirmed"; delete node.note; node.isNew = true; delete node.level; delete node.count;
         record = { azione: "riscritto", passaggio: before, testo: a.text };
         log.push("hai riscritto " + q2(before) + " come " + q2(a.text));
       } else if (pick.k === "elimina") {
@@ -935,7 +979,7 @@
         log.push("hai aggiunto " + q2(a.text) + " " + pick.k + " " + q2(before));
       } else if (pick.k === "ruolo") {
         const lane = await askLane(run, p, "Chi lo fa?");
-        node.lane = lane; node.isNew = true;
+        node.lane = lane; node.isNew = true; delete node.level; delete node.count;
         pruneLanes(p);
         record = { azione: "cambiato ruolo", passaggio: before, ruolo: p.lanes[node.lane] };
         log.push("hai indicato che " + q2(before) + " lo fa: " + p.lanes[node.lane]);
@@ -943,15 +987,18 @@
         await fredSay("Scrivi il tuo commento: lo riporto così come lo scrivi.", run);
         const a = await askText({ placeholder: "Scrivi qui…" });
         guard(run); clearComposer(); addMsg("user", a.text);
-        node.status = "variant"; node.note = "Detto da te: «" + a.text + "»"; node.isNew = true;
+        node.status = "variant"; node.note = "Detto da te: «" + a.text + "»"; node.isNew = true; delete node.level; delete node.count;
         record = { azione: "commento", passaggio: before, testo: a.text };
         log.push("hai commentato " + q2(before));
       }
       p = FredDiagram.autoLayout(p);
       saveAnswer("modifica_mappa", JSON.stringify(record), before);
-      state.memory.proc = p;
-      state.memory.lastChange = { node: before, text: log.join("; "), summary: null, edits: true };
-      state.memory.followUps = null;
+      if (opts.memKey) state.memory[opts.memKey] = p;
+      else {
+        state.memory.proc = p;
+        state.memory.lastChange = { node: before, text: log.join("; "), summary: null, edits: true };
+        state.memory.followUps = null;
+      }
       saveProgress();
       await fredSay("Ecco la mappa con la tua modifica.", run);
       diagramCard({ proc: p, bpmn: true });
@@ -1011,23 +1058,127 @@
   }
 
   /* ---------------- Al Fly: punti critici a partire dallo schema approvato ---------------- */
+  /* ---------------- Al Fly: la mappa che unisce le mappe di tutti ----------------
+     Le mappe confermate arrivano dal foglio (script, ?mappe=1). I passaggi simili
+     (stesse parole importanti) diventano un solo riquadro; il colore dice in quante
+     mappe compare: verde quasi tutte, arancio alcune, rosso poche. */
+  const STOP = new Set(("il lo la i gli le l un uno una di a da in con su per tra fra del dello della dei degli delle dell al allo alla ai agli alle all " +
+    "dal dallo dalla dai dagli dalle dall nel nello nella nei negli nelle nell sul sullo sulla sui sugli sulle sull e ed o che se poi " +
+    "quando ci si mi ti vi ne non è viene vengono").split(" "));
+  function keyWords(label) {
+    return String(label).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’]/g, " ")
+      .replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !STOP.has(w)).map((w) => w.slice(0, 5));
+  }
+  function similar(a, b) {
+    if (!a.length || !b.length) return 0;
+    const A = new Set(a), B = new Set(b);
+    let common = 0; A.forEach((w) => { if (B.has(w)) common++; });
+    return (2 * common) / (A.size + B.size);
+  }
+  function orderOf(p) {          // passaggi in ordine di percorso, dall'inizio
+    const out = {}; p.nodes.forEach((n) => { out[n.id] = []; });
+    p.edges.forEach((e) => { if (out[e.from]) out[e.from].push(e.to); });
+    const seen = new Set(), list = [];
+    const starts = p.nodes.filter((n) => n.type === "start").map((n) => n.id);
+    const queue = starts.length ? starts.slice() : (p.nodes[0] ? [p.nodes[0].id] : []);
+    while (queue.length) { const id = queue.shift(); if (seen.has(id)) continue; seen.add(id); list.push(id); (out[id] || []).forEach((t) => queue.push(t)); }
+    p.nodes.forEach((n) => { if (!seen.has(n.id)) list.push(n.id); });
+    return list;
+  }
+  function aggregateMaps(maps, ses) {
+    const soglie = (ses && ses.soglie) || { alta: 0.75, media: 0.4 };
+    const clusters = [];
+    maps.forEach((p, mi) => {
+      const ids = orderOf(p);
+      const used = new Set();
+      ids.forEach((id, k) => {
+        const n = p.nodes.find((x) => x.id === id);
+        if (!n || !String(n.label || "").trim()) return;
+        const kw = keyWords(n.label);
+        let best = null, bestS = 0;
+        clusters.forEach((c) => {
+          if (used.has(c)) return;
+          const sc = similar(kw, c.kw);
+          if (sc > bestS) { bestS = sc; best = c; }
+        });
+        if (!best || bestS < 0.5) { best = { kw: kw, labels: {}, maps: new Set(), pos: [], roles: {} }; clusters.push(best); }
+        used.add(best);
+        best.labels[n.label] = (best.labels[n.label] || 0) + 1;
+        best.maps.add(mi);
+        best.pos.push(ids.length > 1 ? k / (ids.length - 1) : 0);
+        const role = String((p.lanes || [])[n.lane] || "Non indicato").trim();
+        best.roles[role] = (best.roles[role] || 0) + 1;
+      });
+    });
+    const total = maps.length;
+    const top = (o) => Object.keys(o).sort((a, b) => o[b] - o[a])[0];
+    clusters.forEach((c) => { c.avg = c.pos.reduce((a, b) => a + b, 0) / c.pos.length; });
+    clusters.sort((a, b) => a.avg - b.avg);
+    const lanes = [];
+    const nodes = clusters.map((c, i) => {
+      const role = top(c.roles);
+      if (lanes.indexOf(role) < 0) lanes.push(role);
+      const ratio = c.maps.size / total;
+      return { id: "a" + (i + 1), type: i === 0 ? "start" : i === clusters.length - 1 ? "end" : "task", lane: lanes.indexOf(role),
+               status: "confirmed", label: top(c.labels), count: c.maps.size + "/" + total,
+               level: ratio >= soglie.alta ? "alta" : ratio >= soglie.media ? "media" : "bassa" };
+    });
+    const edges = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id }));
+    const title = (maps[0] && maps[0].title) || "Mappa unita";
+    return FredDiagram.autoLayout({ title: title, lanes: lanes.length ? lanes : ["Non indicato"], nodes: nodes, edges: edges, aggregated: true, total: total });
+  }
+  async function fetchMaps() {
+    if (!endpointOk()) return [];
+    try {
+      const res = await fetch(PILOT.endpoint + "?mappe=1", { method: "GET", cache: "no-store" });
+      const data = await res.json();
+      return (data && data.ok && Array.isArray(data.mappe)) ? data.mappe : [];
+    } catch (e) { return []; }
+  }
+  async function buildAggregate(run, ses) {
+    const own = state.memory.approvedProc || state.memory.proc || FLOW.process;
+    const wait = thinking(ses.thinkingAggregate || "Al Fly sta unendo le mappe…");
+    const remote = await fetchMaps();
+    wait.remove(); guard(run);
+    const others = remote.filter((m) => m && m.mappa && Array.isArray(m.mappa.nodes) && (!profile || m.codice !== profile.codice))
+                         .map((m) => m.mappa);
+    return aggregateMaps([own].concat(others), ses);
+  }
+
   async function runEsplorazione(run, ses) {
-    const proc = FredDiagram.autoLayout(clone(state.memory.approvedProc || state.memory.proc || FLOW.process));
-    proc.nodes.forEach((n) => { delete n.isNew; });
     const groups = ses.tappe || [ses.questions.map((q) => q.id)];
     const i = alflyIndex();
     const qs = ses.questions.filter((q) => groups[i].indexOf(q.id) >= 0);
     const usesMap = (q) => ["selectStep", "selectSteps", "mapChange"].indexOf(q.type) >= 0;
-    if (i === 0) {
+    let proc;
+    if (i === 0 || !state.memory.alflyProc) {
       scene();
       for (const line of ses.greeting) await fredSay(line, run);
-      if (ses.intro) await fredSay(ses.intro, run);
+      proc = await buildAggregate(run, ses);
+      state.memory.alflyProc = proc;
+      saveProgress();
+      const n = proc.total || 1;
+      await fredSay(fill(n > 1 ? ses.intro : (ses.introAlone || ses.intro), { n: n }), run);
       diagramCard({ proc: proc });
-      await new Promise((resolve) => actions([{ label: "Va bene", primary: true, onClick: resolve },
+      saveAnswer("mappa_aggregata", JSON.stringify({ mappe: n, nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane], quante: x.count })) }));
+      // la persona può modificare ancora una volta la mappa
+      await fredSay(ses.askEdit || "Vuoi modificare qualcosa in questa mappa?", run);
+      const edit = await new Promise((resolve) => actions([{ label: "Sì", primary: true, onClick: () => resolve(true) },
+                                                           { label: "No", onClick: () => resolve(false) }]));
+      guard(run); clearComposer(); addMsg("user", edit ? "Sì" : "No");
+      if (edit) {
+        const res = await editMap(run, proc, { memKey: "alflyProc" });
+        if (res.changed) {
+          proc = res.proc;
+          saveAnswer("mappa_aggregata_modificata", JSON.stringify({ nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane] })) }));
+        }
+      }
+      await new Promise((resolve) => actions([{ label: "Va bene, iniziamo", primary: true, onClick: resolve },
                                               { label: "Più tardi", onClick: minimize }]));
       guard(run);
       clearComposer();
     } else {
+      proc = FredDiagram.autoLayout(clone(state.memory.alflyProc));
       const ga = ses.greetingAgain || [];
       if (ga.length) await fredSay(ga[(i - 1) % ga.length], run);
       if (qs.length && !usesMap(qs[0])) diagramCard({ proc: proc });   // la mappa resta sotto gli occhi
@@ -1449,6 +1600,7 @@
         const nx = el("p", "proj-next"); nx.appendChild(el("b", null, "Prossimo passo: ")); nx.appendChild(document.createTextNode(p.prossimo_passo));
         card.appendChild(nx);
       }
+      card.appendChild(voteBox(p));
       box.appendChild(card);
     });
     // le barre e i cerchi si riempiono dopo il disegno
@@ -1456,6 +1608,58 @@
       box.querySelectorAll(".bar i").forEach((f) => { f.style.width = f.dataset.w; });
       box.querySelectorAll(".ring .val").forEach((c) => { c.setAttribute("stroke-dashoffset", c.dataset.off); });
     }));
+  }
+  /* valutazione di ogni progetto: mi piace / non mi piace + commento, salvati nel foglio */
+  const ROSE_VOTI = "alvolo-rose-voti";
+  function sendVote(p, v) {
+    if (!profile) return;
+    const q = load(QUEUE, []);
+    q.push({ data_ora: new Date().toISOString(), codice: profile.codice, divisione: profile.divisione, ruolo: profile.ruolo,
+             personaggio: "Rose Deiventi", tappa: "Cruscotto", domanda_id: "valutazione_progetto", domanda: p.progetto || "",
+             risposta: JSON.stringify({ progetto: p.progetto || "", voto: v.voto || "", commento: v.commento || "" }), passaggi: "" });
+    store(QUEUE, q); flush();
+  }
+  function voteBox(p) {
+    const key = p.progetto || p.problema || "";
+    const all = load(ROSE_VOTI, {});
+    const mine = all[key] || { voto: "", commento: "" };
+    const wrap = el("div", "vote");
+    wrap.appendChild(el("span", "vote-title", "La tua valutazione"));
+    const row = el("div", "vote-row");
+    const mk = (v, icon, label, base) => {
+      const b = el("button", "vote-btn");
+      b.type = "button"; b.setAttribute("aria-pressed", String(mine.voto === v));
+      b.setAttribute("aria-label", label);
+      b.appendChild(el("span", "vote-ico", icon));
+      b.appendChild(el("span", "vote-n", String((base || 0) + (mine.voto === v ? 1 : 0))));
+      b.addEventListener("click", () => {
+        mine.voto = mine.voto === v ? "" : v;          // un secondo tocco toglie il voto
+        const a = load(ROSE_VOTI, {}); a[key] = mine; store(ROSE_VOTI, a);
+        sendVote(p, mine);
+        wrap.replaceWith(voteBox(p));
+      });
+      return b;
+    };
+    row.appendChild(mk("su", "👍", "Mi piace", rose.isExample ? 0 : p.mi_piace));
+    row.appendChild(mk("giu", "👎", "Non mi piace", rose.isExample ? 0 : p.non_mi_piace));
+    wrap.appendChild(row);
+    const ta = el("textarea", "vote-text");
+    ta.rows = 2; ta.placeholder = "Scrivi cosa ne pensi (facoltativo)"; ta.value = mine.commento || "";
+    ta.setAttribute("aria-label", "Commento su " + key);
+    const send = el("button", "btn btn-ghost btn-sm", mine.commento ? "Aggiorna il commento" : "Invia il commento");
+    send.type = "button"; send.disabled = true;
+    const note = el("span", "vote-note", mine.commento ? "Commento inviato." : "");
+    ta.addEventListener("input", () => { send.disabled = !ta.value.trim() || ta.value.trim() === (mine.commento || ""); });
+    send.addEventListener("click", () => {
+      mine.commento = ta.value.trim();
+      const a = load(ROSE_VOTI, {}); a[key] = mine; store(ROSE_VOTI, a);
+      sendVote(p, mine);
+      send.disabled = true; send.textContent = "Aggiorna il commento"; note.textContent = "Grazie, commento inviato.";
+    });
+    wrap.appendChild(ta);
+    const foot = el("div", "vote-foot"); foot.appendChild(send); foot.appendChild(note);
+    wrap.appendChild(foot);
+    return wrap;
   }
   function setRoseList(list, source, isExample) {
     rose.list = list; rose.source = source; rose.isExample = !!isExample;
@@ -1479,7 +1683,7 @@
   async function fetchRose() {
     if (!endpointOk()) { loadRoseCache(); return; }
     try {
-      const res = await fetch(PILOT.endpoint + "?progetti=1", { method: "GET", cache: "no-store" });
+      const res = await fetch(PILOT.endpoint + "?progetti=1&codice=" + encodeURIComponent(profile ? profile.codice : ""), { method: "GET", cache: "no-store" });
       const data = await res.json();
       if (!data || !data.ok || !Array.isArray(data.progetti)) throw new Error("risposta senza progetti");
       const list = data.progetti.filter((p) => p && (p.progetto || p.problema));

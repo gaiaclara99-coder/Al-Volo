@@ -19,7 +19,10 @@ window.FredDiagram = (function () {
   const C = {
     ink: "#1F2A44", ink2: "#4A4740", paper: "#FBF8F2", band: "#F3EDE1",
     line: "#DDD6C8", brass: "#8A5A12", brassLine: "#B7791F", variantFill: "#FFF5E2",
-    verify: "#7C8496", select: "#2F6FB0", fresh: "#2E7D4F", freshFill: "#ECF7F0"
+    verify: "#7C8496", select: "#2F6FB0", fresh: "#2E7D4F", freshFill: "#ECF7F0",
+    // mappa aggregata: quante mappe riportano il passaggio
+    hi: "#2E7D4F", hiFill: "#E7F3EC", mid: "#B86200", midFill: "#FFF0DC", lo: "#B3261E", loFill: "#FCE8E6",
+    laneHi: "#FBEBC4"
   };
 
   function s(tag, attrs, parent) {
@@ -166,8 +169,9 @@ window.FredDiagram = (function () {
     }, defs);
     s("path", { d: "M0 0 L10 5 L0 10 z", fill: C.ink }, m);
 
+    const hl = opts.highlightLane;
     proc.lanes.forEach((name, i) => {
-      s("rect", { x: i * S.laneW, y: 0, width: S.laneW, height: H, fill: i % 2 ? C.paper : C.band }, svg);
+      s("rect", { x: i * S.laneW, y: 0, width: S.laneW, height: H, fill: i === hl ? C.laneHi : (i % 2 ? C.paper : C.band) }, svg);
       if (i > 0) s("line", { x1: i * S.laneW, y1: 0, x2: i * S.laneW, y2: H, stroke: C.line, "stroke-width": 1 }, svg);
       const maxC = Math.floor((S.laneW - 8) / (S.headFont * 0.56));
       multiline(svg, wrap(name, maxC).slice(0, 2), i * S.laneW + S.laneW / 2, S.headH / 2,
@@ -234,6 +238,11 @@ window.FredDiagram = (function () {
       if (n.status === "variant") { fill = C.variantFill; stroke = C.brassLine; sw = 2.4; }
       if (n.status === "verify") { stroke = C.verify; dash = "4 3"; if (isTerminal) { fill = "#FFFFFF"; text = C.ink; } }
       if (n.isNew) { stroke = C.fresh; sw = 2.6; dash = null; if (!isTerminal) fill = C.freshFill; }
+      if (n.level) {                 // mappa aggregata: verde, arancio, rosso
+        const L = { alta: [C.hi, C.hiFill], media: [C.mid, C.midFill], bassa: [C.lo, C.loFill] }[n.level];
+        if (L) { stroke = L[0]; fill = L[1]; text = C.ink; sw = 2.6; dash = null; }
+      }
+      if (hl != null && opts.dimOthers && n.lane !== hl) g.setAttribute("opacity", "0.5");
       if (opts.selectedId === n.id || (opts.selectedIds && opts.selectedIds.indexOf(n.id) >= 0)) {
         stroke = C.select; sw = 3; dash = null;
       }
@@ -280,10 +289,20 @@ window.FredDiagram = (function () {
         t.textContent = "DA TE";
       }
 
-      const statusText = ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
+      if (n.count) {
+        const bw = S.font * 3.1, bh = S.font * 1.35;
+        const bx = n._cx + S.nodeW / 2 - bw + 4, by = n._cy - n._hh - bh + 3;   // sopra il bordo, senza coprire il testo
+        const col = { alta: C.hi, media: C.mid, bassa: C.lo }[n.level] || C.ink;
+        s("rect", { x: bx, y: by, width: bw, height: bh, rx: bh / 2, fill: col }, g);
+        const bt = s("text", { x: bx + bw / 2, y: by + bh * 0.72, "text-anchor": "middle", fill: "#FFFFFF",
+          "font-size": S.font * 0.8, "font-weight": 700, "font-family": "Archivo, sans-serif" }, g);
+        bt.textContent = n.count;
+      }
+      const statusText = n.level ? ({ alta: "in quasi tutte le mappe", media: "in alcune mappe", bassa: "in poche mappe" }[n.level] + (n.count ? ": " + n.count : ""))
+        : ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
       const title = s("title", {}, g);
       title.textContent = n.label + (statusText ? " (" + statusText + ")" : "");
-      if (opts.onSelect) {
+      if (opts.onSelect && (!opts.selectableIds || opts.selectableIds.indexOf(n.id) >= 0)) {
         g.setAttribute("tabindex", "0");
         g.setAttribute("role", "button");
         g.setAttribute("aria-label", n.label + ", " + statusText);
@@ -303,6 +322,13 @@ window.FredDiagram = (function () {
     const el = document.createElement("div");
     el.className = "fd-legend";
     const hasNew = proc && proc.nodes && proc.nodes.some((n) => n.isNew);
+    if (proc && proc.nodes && proc.nodes.some((n) => n.level)) {
+      el.innerHTML = (hasNew ? '<span><i class="lg lg-new"></i>Cambiato da te</span>' : "") +
+        '<span><i class="lg lg-hi"></i>In quasi tutte le mappe</span>' +
+        '<span><i class="lg lg-mid"></i>In alcune mappe</span>' +
+        '<span><i class="lg lg-lo"></i>In poche mappe</span>';
+      return el;
+    }
     el.innerHTML =
       (hasNew ? '<span><i class="lg lg-new"></i>Cambiato da te</span>' : "") +
       '<span><i class="lg lg-ok"></i>Confermato</span>' +

@@ -11,7 +11,7 @@ window.AL_VOLO_PILOTA = {
   chiave: "i_fratelli_Fly_sono_i_migliori",
 
   // 3. Attività su cui lavora il pilota, con l'articolo (es. "il collaudo del pezzo", "l'emissione dell'ordine")
-  attivita: "il processo del procurement",
+  attivita: "l'approvazione delle OdA",
 
   // 4. Codice dei partecipanti al test: prefisso + 3 cifre casuali + suffisso (es. T123TT).
   //    Divisione e ruolo non vengono chiesti: in produzione arriveranno da Workday.

@@ -135,6 +135,7 @@ body { padding-top: var(--tour-h); }
 .msg-fred { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; }
 .msg-user { align-self: flex-end; background: var(--navy); color: #fff; border-radius: 14px 14px 4px 14px; }
 .msg-skip { opacity: .75; font-style: italic; }
+.msg-note { font-size: 13px; line-height: 1.45; color: var(--ink2); background: #F6F1E6; }
 
 .scene { margin: 0 0 4px; border-radius: 12px; overflow: hidden; border: 3px solid #5C4630; }
 .scene img { display: block; width: 100%; height: 170px; object-fit: cover; object-position: 50% 20%; }
@@ -278,6 +279,8 @@ button.crew-card:active { background: #F3EFE6; }
 .crew-text .crew-meta { font-size: 12px; font-weight: 600; color: var(--brass); }
 .crew-soon { cursor: default; background: #FAF8F3; }
 .crew-soon .crew-avatar { filter: grayscale(.35); }
+.home-edit { align-self: stretch; min-height: 48px; font-size: 16px; }
+.lg-ctx { border: 2px dashed #8E97A8; background: #F1F2F5; }
 .home-note { margin: auto 0 0; font-size: 13px; line-height: 1.45; color: var(--ink2); text-align: center; }
 body.phone .popup { inset: 0; width: 100%; height: 100dvh; border-radius: 0; }
 body.phone .popup-head { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }

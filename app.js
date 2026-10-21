@@ -3,6 +3,7 @@
    Conversazione simulata: nessun dato esce dal browser.
    Punti di aggancio per il team di sviluppo segnati con "AGGANCIO".
    ===================================================================== */
+window.AL_VOLO_VERSIONE = "21-10 sera";
 (function () {
   const FLOW = window.FRED_FLOW;
   const PILOT = window.AL_VOLO_PILOTA || {};
@@ -1640,7 +1641,7 @@
       : alT ? "Riprendi: tappa " + (alT + 1) + " di " + alN
       : alN + " tappe brevi, dalla tua mappa confermata";
     document.getElementById("homeCode").textContent = profile ? "Il tuo codice di test: " + profile.codice : "";
-    document.getElementById("homeEditMap").hidden = !state.memory.proc;
+    const editBtn = document.getElementById("homeEditMap"); if (editBtn) editBtn.hidden = !state.memory.proc;
   }
 
   function goHome() {
@@ -1659,7 +1660,17 @@
     if (b.disabled) return;
     startFromHome(b.dataset.start === "mercoledi" ? (nextFredStep() || "venerdi2") : b.dataset.start);
   }));
-  document.getElementById("homeEditMap").addEventListener("click", () => startFromHome("modifica"));
+  // il pulsante "Modifica la tua mappa": se l'index.html è di una versione precedente, lo crea qui
+  (function () {
+    let b = document.getElementById("homeEditMap");
+    if (!b) {
+      b = document.createElement("button"); b.type = "button"; b.id = "homeEditMap"; b.hidden = true;
+      b.className = "btn btn-ghost home-edit"; b.textContent = "✏️ Modifica la tua mappa";
+      const code = document.getElementById("homeCode");
+      if (code && code.parentNode) code.parentNode.insertBefore(b, code); else homeEl.appendChild(b);
+    }
+    b.addEventListener("click", () => startFromHome("modifica"));
+  })();
   homeEl.querySelectorAll("[data-crew]").forEach((img) => {
     img.src = { alfly: ASSETS.alflyAvatar, ally: ASSETS.allyAvatar, rose: ASSETS.roseAvatar }[img.dataset.crew] || ASSETS.avatar;
   });
@@ -2069,5 +2080,6 @@
   reset(nextFredStep() || "venerdi2");
   setupWelcome();
   applyPhoneLayout();
+  window.AL_VOLO_AVVIATO = true;   // il controllo di avvio in index.html sa che è tutto partito
   flush();
 })();

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="it" data-versione="21-10 sera">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -8,6 +8,34 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script>
+  /* Controllo di avvio: se qualcosa non parte, invece della pagina vuota compare un riquadro
+     con il motivo (utile per capire quale file su GitHub non è aggiornato). */
+  window.AL_VOLO_ERRORI = [];
+  window.addEventListener("error", function (e) {
+    var t = e.target;
+    if (t && t !== window && (t.src || t.href)) { window.AL_VOLO_ERRORI.push("file non trovato: " + String(t.src || t.href).split("/").pop()); return; }
+    window.AL_VOLO_ERRORI.push((e.filename ? e.filename.split("/").pop() + ": " : "") + e.message);
+  }, true);
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      if (window.AL_VOLO_AVVIATO) return;
+      var file = function (ok) { return ok ? "ok" : "MANCANTE o vecchio"; };
+      var righe = [
+        "Al Volo non è partito. Fai uno screenshot di questo riquadro.",
+        "index.html: versione " + document.documentElement.getAttribute("data-versione"),
+        "config.js: " + file(window.AL_VOLO_PILOTA),
+        "flow.js: " + file(window.FRED_FLOW && window.FRED_FLOW.sessions && window.FRED_FLOW.sessions.modifica),
+        "diagram.js: " + file(window.FredDiagram),
+        "app.js: " + (window.AL_VOLO_VERSIONE ? "versione " + window.AL_VOLO_VERSIONE : "MANCANTE o vecchio")
+      ].concat(window.AL_VOLO_ERRORI.map(function (m) { return "Errore: " + m; }));
+      var box = document.createElement("pre");
+      box.style.cssText = "position:fixed;left:12px;right:12px;top:12px;z-index:99999;white-space:pre-wrap;background:#FCE8E6;color:#7A1B14;border:2px solid #B3261E;border-radius:10px;padding:14px;font:14px/1.45 system-ui,sans-serif";
+      box.textContent = righe.join("\n");
+      document.body.appendChild(box);
+    }, 1500);
+  });
+</script>
 </head>
 <body>
 
@@ -62,6 +90,7 @@
       </span>
     </button>
   </div>
+  <button type="button" class="btn btn-ghost home-edit" id="homeEditMap" hidden>✏️ Modifica la tua mappa</button>
   <p class="home-note" id="homeCode"></p>
 </section>
 

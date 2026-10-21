@@ -237,6 +237,7 @@ window.FredDiagram = (function () {
       if (isTerminal) { fill = C.ink; text = "#FFFFFF"; }
       if (n.status === "variant") { fill = C.variantFill; stroke = C.brassLine; sw = 2.4; }
       if (n.status === "verify") { stroke = C.verify; dash = "4 3"; if (isTerminal) { fill = "#FFFFFF"; text = C.ink; } }
+      if (n.status === "context") { stroke = "#8E97A8"; fill = "#F1F2F5"; dash = "2 3"; text = C.ink; }   // attività prima e dopo
       if (n.isNew) { stroke = C.fresh; sw = 2.6; dash = null; if (!isTerminal) fill = C.freshFill; }
       if (n.level) {                 // mappa aggregata: verde, arancio, rosso
         const L = { alta: [C.hi, C.hiFill], media: [C.mid, C.midFill], bassa: [C.lo, C.loFill] }[n.level];
@@ -299,7 +300,8 @@ window.FredDiagram = (function () {
         bt.textContent = n.count;
       }
       const statusText = n.level ? ({ alta: "in quasi tutte le mappe", media: "in alcune mappe", bassa: "in poche mappe" }[n.level] + (n.count ? ": " + n.count : ""))
-        : ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
+        : ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare",
+           context: n.context === "before" ? "attività precedente" : "attività successiva" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
       const title = s("title", {}, g);
       title.textContent = n.label + (statusText ? " (" + statusText + ")" : "");
       if (opts.onSelect && (!opts.selectableIds || opts.selectableIds.indexOf(n.id) >= 0)) {
@@ -329,8 +331,10 @@ window.FredDiagram = (function () {
         '<span><i class="lg lg-lo"></i>In poche mappe</span>';
       return el;
     }
+    const hasCtx = proc && proc.nodes && proc.nodes.some((n) => n.status === "context");
     el.innerHTML =
       (hasNew ? '<span><i class="lg lg-new"></i>Cambiato da te</span>' : "") +
+      (hasCtx ? '<span><i class="lg lg-ctx"></i>Attività prima e dopo</span>' : "") +
       '<span><i class="lg lg-ok"></i>Confermato</span>' +
       '<span><i class="lg lg-var"></i>Variante</span>' +
       '<span><i class="lg lg-ver"></i>Da verificare</span>';

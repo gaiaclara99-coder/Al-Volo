@@ -308,7 +308,7 @@ window.FRED_FLOW = {
 
     alfly: {
       "type": "esplorazione",
-      "dayLabel": "Una domanda veloce e riparto!",
+      "dayLabel": "Una domanda al giorno",
       "teaser": "Al Fly ha qualche domanda per te",
       "showScene": true,
       "greeting": [
@@ -322,91 +322,41 @@ window.FRED_FLOW = {
       "soglie": { "alta": 0.75, "media": 0.4 },
       // Al Fly è diviso in tappe brevi: ogni riga è una tappa, con gli id delle domande che contiene
       // (le domande di approfondimento seguono la loro domanda). Per raggrupparle, es. [["frequenza", "tempo"], …]
-      "tappe": [["frequenza"], ["tempo"], ["attenzione"], ["fermo"], ["inefficienze"]],
+      "tappe": [["frequenza"], ["ripetitive"], ["tempo"], ["delega"], ["attenzione"], ["rischi"], ["inefficienze"]],
       // saluti delle tappe successive alla prima, uno per tappa (si ripetono in giro se le tappe sono di più)
-      "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!"],
+      "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!", "Quota di crociera raggiunta!", "Ultimo controllo prima dell'atterraggio!"],
+      // una tappa al giorno: la successiva si apre il giorno dopo
+      "unaAlGiorno": true,
+      "closingDay": "Grazie! Per oggi è tutto: domani ti faccio la prossima domanda. Riparto.",
       "closingLast": "Grazie! Per questa mappa le domande sono finite. Riparto.",
       "questions": [
         {
           "id": "frequenza",
-          "type": "frequency",
-          "text": "Con quale frequenza svolgi l'attività?",
-          "units": [
-            "al giorno",
-            "a settimana",
-            "al mese",
-            "all'anno"
-          ]
-        },
-        {
-          "id": "tempo",
-          "type": "selectStep",
-          "text": "Quale tra i passaggi richiede più tempo? Indicalo nella mappa.",
-          "noneLabel": "Nessuno in particolare",
-          "followUps": [
-            {
-              "id": "tempo-fattori",
-              "type": "open",
-              "text": "Perché? Quale o quali fattori lo rendono dispendioso in termini di tempo? Descrivi.",
-              "placeholder": "Scrivi qui…"
-            },
-            {
-              "id": "tempo-frequenza",
-              "type": "choice",
-              "text": "Qual è la sua frequenza?",
-              "options": [
-                "Ogni volta",
-                "Spesso",
-                "A volte",
-                "Raramente"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "attenzione",
-          "type": "selectSteps",
-          "text": "Quali sono invece i passaggi che meritano maggiore attenzione? Indicali nella mappa, poi premi «Fatto».",
-          "noneLabel": "Nessuno",
-          "doneLabel": "Fatto",
-          "followUps": [
-            {
-              "id": "attenzione-motivo",
-              "type": "open",
-              "text": "Motiva la tua scelta.",
-              "placeholder": "Scrivi qui…"
-            },
-            {
-              "id": "attenzione-frequenza",
-              "type": "choice",
-              "text": "Quanto sono frequenti?",
-              "options": [
-                "Ogni volta",
-                "Spesso",
-                "A volte",
-                "Raramente"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "fermo",
-          "type": "selectStep",
-          "text": "C'è un punto in cui il lavoro si ferma o si accumula? Indicalo nella mappa.",
-          "noneLabel": "Nessuno",
-          "followUps": [
-            {
-              "id": "fermo-fattori",
-              "type": "open",
-              "text": "Perché? Indica i fattori che secondo te sono dirimenti.",
-              "placeholder": "Scrivi qui…"
-            }
-          ]
-        },
-        {
-          "id": "inefficienze",
           "type": "choice",
-          "text": "Ci sono delle inefficienze nel processo?",
+          "text": "Con quale frequenza svolgi le singole attività?",
+          "options": [
+            "Più volte al giorno",
+            "Ogni giorno",
+            "2/3 volte a settimana",
+            "1 volta a settimana",
+            "1 volta al mese",
+            "Altro"
+          ],
+          "followUpsIf": {
+            "Altro": [
+              {
+                "id": "frequenza-altro",
+                "type": "open",
+                "text": "Altro: specifica.",
+                "placeholder": "Scrivi qui…"
+              }
+            ]
+          }
+        },
+        {
+          "id": "ripetitive",
+          "type": "choice",
+          "text": "Ci sono attività ripetitive?",
           "options": [
             "Sì",
             "No"
@@ -414,19 +364,147 @@ window.FRED_FLOW = {
           "followUpsIf": {
             "Sì": [
               {
-                "id": "inefficienze-tipo",
+                "id": "ripetitive-quali",
+                "type": "selectSteps",
+                "text": "Segnalale nella mappa, poi premi «Fatto».",
+                "noneLabel": "Nessuna",
+                "doneLabel": "Fatto"
+              }
+            ]
+          }
+        },
+        {
+          "id": "tempo",
+          "type": "choice",
+          "text": "Quanto tempo impieghi a svolgere ciascuna attività?",
+          "options": [
+            "Poco",
+            "Abbastanza",
+            "Molto"
+          ],
+          "followUpsIf": {
+            "Molto": [
+              {
+                "id": "tempo-quali",
+                "type": "selectSteps",
+                "text": "Indica nella mappa e motiva la tua risposta: tocca le attività, poi premi «Fatto».",
+                "noneLabel": "Nessuna",
+                "doneLabel": "Fatto",
+                "followUps": [
+                  {
+                    "id": "tempo-quali-motivo",
+                    "type": "open",
+                    "text": "Motiva la tua risposta.",
+                    "placeholder": "Scrivi qui…"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "delega",
+          "type": "choice",
+          "text": "Ci sono attività che delegheresti volentieri?",
+          "options": [
+            "Sì",
+            "No"
+          ],
+          "followUpsIf": {
+            "Sì": [
+              {
+                "id": "delega-quali",
+                "type": "selectSteps",
+                "text": "Indicale nella mappa e motiva: tocca le attività, poi premi «Fatto».",
+                "noneLabel": "Nessuna",
+                "doneLabel": "Fatto",
+                "followUps": [
+                  {
+                    "id": "delega-quali-motivo",
+                    "type": "open",
+                    "text": "Motiva la tua risposta.",
+                    "placeholder": "Scrivi qui…"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "attenzione",
+          "type": "choice",
+          "text": "Ci sono attività che richiedono una maggior attenzione?",
+          "options": [
+            "Sì",
+            "No"
+          ],
+          "followUpsIf": {
+            "Sì": [
+              {
+                "id": "attenzione-quali",
+                "type": "selectSteps",
+                "text": "Indicale nella mappa e motiva: tocca le attività, poi premi «Fatto».",
+                "noneLabel": "Nessuna",
+                "doneLabel": "Fatto",
+                "followUps": [
+                  {
+                    "id": "attenzione-quali-motivo",
+                    "type": "open",
+                    "text": "Motiva la tua risposta.",
+                    "placeholder": "Scrivi qui…"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "rischi",
+          "type": "choice",
+          "text": "Ci sono attività che comportano dei rischi?",
+          "options": [
+            "Sì",
+            "No"
+          ],
+          "followUpsIf": {
+            "Sì": [
+              {
+                "id": "rischi-quali",
+                "type": "selectSteps",
+                "text": "Indicale nella mappa, poi premi «Fatto».",
+                "noneLabel": "Nessuna",
+                "doneLabel": "Fatto"
+              },
+              {
+                "id": "rischi-tipo",
                 "type": "multiChoice",
-                "text": "Di che tipo?",
+                "text": "Che tipo di rischio pongono?",
                 "options": [
-                  "Attese",
-                  "Passaggi inutili",
-                  "Duplicazioni",
-                  "Sovraccarichi",
-                  "Strumenti inadeguati",
-                  "Misurazione insufficiente"
+                  "Economico",
+                  "Procedurale",
+                  "Reputazionale"
                 ],
                 "placeholder": "Altro (facoltativo)…",
                 "doneLabel": "Fatto"
+              }
+            ]
+          }
+        },
+        {
+          "id": "inefficienze",
+          "type": "choice",
+          "text": "Ci sono delle inefficienze o problematiche nel processo che non sono ancora emerse?",
+          "options": [
+            "Sì",
+            "No"
+          ],
+          "followUpsIf": {
+            "Sì": [
+              {
+                "id": "inefficienze-motivo",
+                "type": "open",
+                "text": "Motiva (attese, passaggi inutili, duplicazioni, sovraccarichi, strumenti inadeguati, misurazione insufficiente, priorità instabili, altro).",
+                "placeholder": "Scrivi qui…"
               }
             ]
           }

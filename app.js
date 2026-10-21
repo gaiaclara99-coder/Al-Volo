@@ -122,7 +122,21 @@
     const ses = FLOW.sessions[state.mode] || {};
     return (ses.character && ses.character.name) || FLOW.character.name;
   }
-  function saveAnswer(key, value, steps) {
+  // la mappa della persona in forma leggibile, per la colonna "mappa" del foglio
+  function mapText(p) {
+    if (!p || !Array.isArray(p.nodes)) return "";
+    return orderOf(p).map((id) => {
+      const n = p.nodes.find((x) => x.id === id);
+      if (!n) return "";
+      const tag = n.status === "context" ? (n.context === "before" ? " [precedente]" : " [successiva]") : "";
+      return n.label + " (" + ((p.lanes || [])[n.lane] || "") + ")" + tag;
+    }).filter(Boolean).join(" → ");
+  }
+  function currentMapText(mapKey) {
+    const k = mapKey || (state.mode === "alfly" ? "alflyProc" : state.inY ? "procY" : "proc");
+    return mapText(state.memory[k]);
+  }
+  function saveAnswer(key, value, steps, mapKey) {
     state.answers[key] = value;
     if (!profile) return;
     const row = {
@@ -130,7 +144,8 @@
       personaggio: characterName(), tappa: (FLOW.sessions[state.mode] || {}).dayLabel || state.mode,
       domanda_id: key, domanda: state.lastFredText || "",
       risposta: value == null ? "" : (typeof value === "string" ? value : JSON.stringify(value)),
-      passaggi: steps || ""
+      passaggi: steps || "",
+      mappa: currentMapText(mapKey)
     };
     const q = load(QUEUE, []); q.push(row); store(QUEUE, q);
     saveProgress();
@@ -467,7 +482,8 @@
       const chosen = [];
       const resolve = (nodes) => { card._freeze(nodes.map((n) => n.id)); done(nodes); };
       let doneBtn = null;
-      const card = diagramCard({ proc: proc, selectedIds: [], onSelect: (node) => {
+      const only = q.onlyContext ? proc.nodes.filter((n) => n.status === "context").map((n) => n.id) : undefined;
+      const card = diagramCard({ proc: proc, selectedIds: [], selectableIds: only, onSelect: (node) => {
         if (!multiple) { resolve([node]); return; }
         const i = chosen.findIndex((n) => n.id === node.id);
         if (i >= 0) chosen.splice(i, 1); else chosen.push(node);
@@ -518,7 +534,8 @@
         list.hidden = !steps.length;
         inp.placeholder = "Passaggio " + (steps.length + 1) + "…";
         add.disabled = !inp.value.trim();
-        done.disabled = steps.length < 2 && !(steps.length === 1 && inp.value.trim());
+        const min = q.min || 2;
+        done.disabled = steps.length + (inp.value.trim() ? 1 : 0) < min;
         list.scrollTop = list.scrollHeight;
         scrollDown();
       };
@@ -532,18 +549,43 @@
       add.addEventListener("click", () => { if (inp.value.trim()) push(); });
       done.addEventListener("click", () => {
         if (inp.value.trim()) splitSteps(inp.value).forEach((s) => steps.push(s));
-        if (steps.length >= 2) resolve(steps.slice());
+        if (steps.length >= (q.min || 2)) resolve(steps.slice());
       });
       ui.composer.appendChild(hint); ui.composer.appendChild(list); ui.composer.appendChild(row); ui.composer.appendChild(done);
+      if (q.allowNone) {
+        const none = el("button", "link-btn", q.noneLabel || "Nessuna"); none.type = "button";
+        none.addEventListener("click", () => resolve([]));
+        ui.composer.appendChild(none);
+      }
       redraw();
       inp.focus({ preventScroll: true });
     });
   }
-  function procFromSteps(steps) {
+  // aggiunge alla mappa le attività che vengono prima dell'inizio o dopo la fine, in una colonna a parte
+  function addContext(p, items, side) {
+    const laneName = side === "before" ? "Attività precedenti" : "Attività successive";
+    p.nodes.filter((n) => n.status === "context" && n.context === side).map((n) => n.id).forEach((id) => deleteNode(p, id));
+    let lane = p.lanes.indexOf(laneName);
+    if (lane < 0) {
+      if (side === "before") { p.lanes.unshift(laneName); p.nodes.forEach((n) => { n.lane += 1; }); lane = 0; }
+      else { p.lanes.push(laneName); lane = p.lanes.length - 1; }
+    }
+    const anchor = side === "before" ? p.nodes.find((n) => n.type === "start") : p.nodes.filter((n) => n.type === "end").pop();
+    let k = 1; const nid = () => { while (p.nodes.some((n) => n.id === "c" + k)) k++; return "c" + k++; };
+    const made = items.map((label) => ({ id: nid(), type: "task", lane: lane, status: "context", context: side, label: label }));
+    made.forEach((n) => p.nodes.push(n));
+    made.slice(1).forEach((n, i) => p.edges.push({ from: made[i].id, to: n.id }));
+    if (anchor && made.length) {
+      if (side === "before") p.edges.push({ from: made[made.length - 1].id, to: anchor.id });
+      else p.edges.push({ from: anchor.id, to: made[0].id });
+    }
+    return p;
+  }
+  function procFromSteps(steps, title) {
     const nodes = steps.map((s, i) => ({ id: "p" + (i + 1), type: i === 0 ? "start" : i === steps.length - 1 ? "end" : "task",
                                          lane: 0, status: "confirmed", label: s }));
     const edges = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id }));
-    const t = String(PILOT.attivita || "Attività");
+    const t = String(title || PILOT.attivita || "Attività");
     return FredDiagram.autoLayout({ title: t.charAt(0).toUpperCase() + t.slice(1), lanes: ["Da indicare"], nodes: nodes, edges: edges });
   }
   function askRoles(q, proc) {
@@ -596,19 +638,49 @@
   }
 
   async function askQuestion(run, q, ctx) {
-    const text = fill(q.text, { passaggio: ctx.node ? ctx.node.label : "" });
+    // "map": "y" = la domanda riguarda la mappa dell'attività scelta da approfondire (Y), non quella del processo (X)
+    if (q.map === "y" && !ctx.inY) {
+      const saved = { proc: ctx.proc, built: ctx.built };
+      ctx.proc = ctx.procY || (state.memory.procY ? FredDiagram.autoLayout(clone(state.memory.procY)) : null);
+      ctx.built = !!ctx.proc;
+      ctx.inY = true; state.inY = true;
+      try { await askQuestion(run, q, ctx); }
+      finally { if (ctx.built) ctx.procY = ctx.proc; ctx.proc = saved.proc; ctx.built = saved.built; ctx.inY = false; state.inY = false; }
+      return;
+    }
+    const yLabel = (state.memory.focus || {}).label || "";
+    const text = fill(q.text, { passaggio: ctx.node ? ctx.node.label : "", y: yLabel });
     if (q.type === "steps") {
       await fredSay(text, run);
       const steps = await askSteps(q);
       guard(run); clearComposer();
       addMsg("user", steps.map((s, i) => (i + 1) + ". " + s).join("\n"), "msg-list");
       saveAnswer(q.id, steps.join("\n"));
-      if (PILOT.mappaDaRacconto !== false) {
+      if (ctx.inY) {
+        ctx.proc = procFromSteps(steps, yLabel);
+        ctx.built = true;
+        state.memory.procY = ctx.proc;
+        saveProgress();
+      } else if (PILOT.mappaDaRacconto !== false) {
         ctx.proc = procFromSteps(steps);
         ctx.built = true;
         state.memory.proc = ctx.proc;
         saveProgress();
       }
+      return;
+    }
+    if (q.type === "contextSteps") {
+      await fredSay(text, run);
+      const items = await askSteps(Object.assign({ min: 1, allowNone: true }, q));
+      guard(run); clearComposer();
+      if (!items.length) { addMsg("user", q.noneLabel || "Nessuna", "msg-skip"); saveAnswer(q.id, "nessuna"); return; }
+      addMsg("user", items.map((s, i) => (i + 1) + ". " + s).join("\n"), "msg-list");
+      ctx.proc = FredDiagram.autoLayout(addContext(clone(ctx.proc), items, q.side));
+      if (!ctx.inY) state.memory.proc = ctx.proc;
+      saveAnswer(q.id, items.join("\n"));
+      saveProgress();
+      await fredSay(q.side === "before" ? "Le ho aggiunte alla mappa, prima dell'inizio." : "Le ho aggiunte alla mappa, dopo la fine.", run);
+      diagramCard({ proc: ctx.proc });
       return;
     }
     if (q.type === "pickRole") {
@@ -625,16 +697,16 @@
       return;
     }
     if (q.type === "pickActivity") {
-      const role = ctx.role || (state.memory.focus || {}).ruolo;
-      const li = ctx.proc.lanes.indexOf(role);
-      const nodes = ctx.proc.nodes.filter((n) => n.lane === li);
+      const role = ctx.role || (state.memory.focus || {}).ruolo || null;
+      const li = role ? ctx.proc.lanes.indexOf(role) : -1;
+      const nodes = li >= 0 ? ctx.proc.nodes.filter((n) => n.lane === li) : ctx.proc.nodes.slice();
       if (!nodes.length) return;
       let node = nodes[0];
       if (nodes.length > 1) {
         await fredSay(fill(q.text, { ruolo: role }), run);
         let card = null;
         node = await new Promise((resolve) => {
-          card = diagramCard({ proc: ctx.proc, highlightLane: li, dimOthers: true, selectableIds: nodes.map((n) => n.id), onSelect: resolve });
+          card = diagramCard({ proc: ctx.proc, highlightLane: li >= 0 ? li : undefined, dimOthers: li >= 0, selectableIds: nodes.map((n) => n.id), onSelect: resolve });
           choose(nodes.map((n) => n.label)).then((k) => resolve(nodes[k]));
         });
         guard(run); clearComposer();
@@ -645,6 +717,7 @@
       saveAnswer(q.id, node.id, node.label);
       saveProgress();
       if (q.intro) await fredSay(fill(q.intro, { passaggio: node.label }), run);
+      for (const f of q.followUps || []) await askQuestion(run, f, ctx);
       return;
     }
     if (q.type === "assignRoles") {
@@ -663,10 +736,10 @@
       });
       p.lanes = lanes;
       ctx.proc = FredDiagram.autoLayout(p);
-      state.memory.proc = ctx.proc;
+      if (ctx.inY) state.memory.procY = ctx.proc; else state.memory.proc = ctx.proc;
       addMsg("user", p.nodes.map((n) => "“" + n.label + "”: " + lanes[n.lane]).join("\n"), "msg-list");
       saveAnswer(q.id, JSON.stringify(p.nodes.map((n) => ({ passaggio: n.label, ruolo: lanes[n.lane] }))));
-      saveAnswer("schema_iniziale", JSON.stringify({ title: p.title, lanes: p.lanes,
+      saveAnswer(ctx.inY ? "schema_iniziale_attivita" : "schema_iniziale", JSON.stringify({ title: p.title, lanes: p.lanes,
         nodes: p.nodes.map((n) => ({ id: n.id, type: n.type, lane: n.lane, label: n.label })),
         edges: p.edges.map((e) => ({ from: e.from, to: e.to, label: e.label || "" })) }));
       await fredSay("Ecco la mappa con i tuoi passaggi e le tue parole.", run);
@@ -674,7 +747,12 @@
       return;
     }
     if (q.type === "selectStep" || q.type === "selectSteps") {
+      if (q.onlyContext && !ctx.proc.nodes.some((n) => n.status === "context")) {
+        saveAnswer(q.id, "nessuna (nessuna attività precedente o successiva indicata)");
+        return;
+      }
       await fredSay(text, run);
+      if (q.note) addMsg("fred", q.note, "msg-note");
       const nodes = await pickSteps(q, ctx.proc, q.type === "selectSteps");
       guard(run); clearComposer();
       if (!nodes.length) { addMsg("user", q.noneLabel); saveAnswer(q.id, "nessuno"); return; }
@@ -692,6 +770,20 @@
       guard(run); clearComposer();
       addMsg("user", yes ? q.options[0] : q.options[1]);
       if (!yes) return;
+      let which = "x";
+      if (state.memory.procY && yLabel) {
+        await fredSay(q.askWhich || "Quale mappa?", run);
+        const opts = [fill(q.whichX || "La mappa del processo", {}), fill(q.whichY || "La mappa di «{y}»", { y: yLabel })];
+        const k = await choose(opts); guard(run); clearComposer(); addMsg("user", opts[k]);
+        which = k === 1 ? "y" : "x";
+      }
+      if (which === "y") {
+        const py = FredDiagram.autoLayout(clone(state.memory.procY));
+        diagramCard({ proc: py });
+        const res = await editMap(run, py, { askSelect: q.askSelect, askHow: q.askHow, memKey: "procY" });
+        if (res.changed) ctx.procY = res.proc;
+        return;
+      }
       const res = await editMap(run, ctx.proc, { askSelect: q.askSelect, askHow: q.askHow });
       if (res.changed) ctx.proc = FredDiagram.autoLayout(clone(res.proc));
       return;
@@ -898,6 +990,11 @@
   // opts: { askSelect, askHow, node }  → restituisce la mappa modificata (o quella di prima, se annulla)
   async function editMap(run, proc, opts) {
     opts = opts || {};
+    const wasInY = state.inY;
+    if (opts.memKey === "procY") state.inY = true;
+    try { return await editMapInner(run, proc, opts); } finally { state.inY = wasInY; }
+  }
+  async function editMapInner(run, proc, opts) {
     let p = clone(proc);
     p.nodes.forEach((n) => { delete n.isNew; });
     const log = [];
@@ -1025,39 +1122,6 @@
   }
 
   // Ultima fase: la persona approva lo schema (che finisce tra gli schemi confermati) o lo corregge
-  async function runApproval(run, ses, proc) {
-    const rounds = ses.maxRounds || 3;
-    let approved = false;
-    for (let round = 0; round < rounds; round++) {
-      await fredSay(ses.approvalQuestion, run);
-      const yes = await new Promise((resolve) => actions([
-        { label: ses.approveLabel, primary: true, onClick: () => resolve(true) },
-        { label: ses.notYetLabel, onClick: () => resolve(false) }
-      ]));
-      guard(run);
-      clearComposer();
-      addMsg("user", yes ? ses.approveLabel : ses.notYetLabel);
-      if (yes) { approved = true; break; }
-      if (round === rounds - 1) break;
-      const res = await editMap(run, proc, { askSelect: ses.askSelect, askHow: ses.askHow });
-      if (res.changed) proc = res.proc;
-    }
-    if (approved) {
-      proc = clone(proc);
-      proc.nodes.forEach((n) => { if (n.status === "verify") n.status = "confirmed"; });   // confermati da chi approva
-      state.memory.approvedProc = proc;          // nel prodotto: file nella cartella degli schemi confermati
-      saveAnswer("schema_confermato", JSON.stringify({ title: proc.title, lanes: proc.lanes,
-        nodes: proc.nodes.map((n) => ({ id: n.id, type: n.type, lane: n.lane, label: n.label, note: n.note })),
-        edges: proc.edges.map((e) => ({ from: e.from, to: e.to, label: e.label || "" })) }));
-      saveAnswer("approvazione", "approvato");
-    }
-    await fredSay(approved ? ses.approvedText : ses.notApprovedText, run);
-    await finalQuestion(run, ses);
-    await fredSay(approved ? ses.thanksYes : ses.thanksFix, run);
-    finish();
-  }
-
-  /* ---------------- Al Fly: punti critici a partire dallo schema approvato ---------------- */
   /* ---------------- Al Fly: la mappa che unisce le mappe di tutti ----------------
      Le mappe confermate arrivano dal foglio (script, ?mappe=1). I passaggi simili
      (stesse parole importanti) diventano un solo riquadro; il colore dice in quante
@@ -1079,7 +1143,9 @@
     const out = {}; p.nodes.forEach((n) => { out[n.id] = []; });
     p.edges.forEach((e) => { if (out[e.from]) out[e.from].push(e.to); });
     const seen = new Set(), list = [];
-    const starts = p.nodes.filter((n) => n.type === "start").map((n) => n.id);
+    const inDeg = {}; p.edges.forEach((e) => { inDeg[e.to] = (inDeg[e.to] || 0) + 1; });
+    const ctxRoots = p.nodes.filter((n) => n.status === "context" && n.context === "before" && !inDeg[n.id]).map((n) => n.id);
+    const starts = ctxRoots.length ? ctxRoots : p.nodes.filter((n) => n.type === "start").map((n) => n.id);
     const queue = starts.length ? starts.slice() : (p.nodes[0] ? [p.nodes[0].id] : []);
     while (queue.length) { const id = queue.shift(); if (seen.has(id)) continue; seen.add(id); list.push(id); (out[id] || []).forEach((t) => queue.push(t)); }
     p.nodes.forEach((n) => { if (!seen.has(n.id)) list.push(n.id); });
@@ -1186,58 +1252,137 @@
     const ctx = { ses: ses, proc: proc, node: null };
     for (const q of qs) await askQuestion(run, q, ctx);
     state.memory.alflyTappa = i + 1;
+    state.memory.alflyGiorno = todayKey();
     const last = i + 1 >= groups.length;
-    await fredSay(last ? (ses.closingLast || ses.closing) : ses.closing, run);
+    const gate = ses.unaAlGiorno && !PROVA;
+    await fredSay(last ? (ses.closingLast || ses.closing) : gate ? (ses.closingDay || ses.closing) : ses.closing, run);
     if (last) { finish(); return; }
     // tappa finita, ma Al Fly ha ancora domande: si riprende quando si vuole
     state.done = true;
     saveProgress();
     ui.badge.hidden = true;
     ui.teaser.hidden = true;
-    actions([{ label: "Torna all'equipaggio", primary: true, onClick: goHome },
-             { label: "Un'altra domanda adesso", onClick: () => startFromHome("alfly") }]);
+    const btns = [{ label: "Torna all'equipaggio", primary: true, onClick: goHome }];
+    if (!gate) btns.push({ label: "Un'altra domanda adesso (prova)", onClick: () => startFromHome("alfly") });
+    actions(btns);
   }
 
+  // le mappe della persona: quella del processo (X) e, se c'è, quella dell'attività approfondita (Y)
+  function personMaps() {
+    const list = [{ key: "proc", proc: state.memory.proc || FLOW.process, label: null }];
+    const y = (state.memory.focus || {}).label;
+    if (state.memory.procY && y) list.push({ key: "procY", proc: state.memory.procY, label: y });
+    return list.map((m) => { const p = FredDiagram.autoLayout(clone(m.proc)); p.nodes.forEach((n) => { delete n.isNew; }); return Object.assign(m, { proc: p }); });
+  }
+  const saveSchema = (id, p) => saveAnswer(id, JSON.stringify({ title: p.title, lanes: p.lanes,
+    nodes: p.nodes.map((n) => ({ id: n.id, type: n.type, lane: n.lane, label: n.label, note: n.note })),
+    edges: p.edges.map((e) => ({ from: e.from, to: e.to, label: e.label || "" })) }));
+
+  async function approveOne(run, ses, m) {
+    state.inY = m.key === "procY";
+    try { return await approveOneInner(run, ses, m); } finally { state.inY = false; }
+  }
+  async function approveOneInner(run, ses, m) {
+    const rounds = ses.maxRounds || 3;
+    let proc = m.proc, approved = false;
+    for (let round = 0; round < rounds; round++) {
+      await fredSay(ses.approvalQuestion, run);
+      const yes = await new Promise((resolve) => actions([
+        { label: ses.approveLabel, primary: true, onClick: () => resolve(true) },
+        { label: ses.notYetLabel, onClick: () => resolve(false) }
+      ]));
+      guard(run);
+      clearComposer();
+      addMsg("user", yes ? ses.approveLabel : ses.notYetLabel);
+      if (yes) { approved = true; break; }
+      if (round === rounds - 1) break;
+      const res = await editMap(run, proc, { askSelect: ses.askSelect, askHow: ses.askHow, memKey: m.key === "procY" ? "procY" : undefined });
+      if (res.changed) proc = res.proc;
+    }
+    if (approved) {
+      proc = clone(proc);
+      proc.nodes.forEach((n) => { if (n.status === "verify") n.status = "confirmed"; });   // confermati da chi approva
+      if (m.key === "procY") { state.memory.approvedProcY = proc; saveSchema("schema_confermato_attivita", proc); }
+      else { state.memory.approvedProc = proc; saveSchema("schema_confermato", proc); }   // Al Fly unisce le mappe del processo
+      saveAnswer(m.key === "procY" ? "approvazione_attivita" : "approvazione", "approvato");
+    }
+    return approved;
+  }
+  async function runApproval(run, ses) {
+    const maps = personMaps();
+    let all = true;
+    for (let i = 0; i < maps.length; i++) {
+      if (i > 0) await fredSay(fill(ses.nextMapLine || "Ora la mappa di «{y}».", { y: maps[i].label }), run);
+      if (i > 0) diagramCard({ proc: maps[i].proc, bpmn: true });
+      if (!(await approveOne(run, ses, maps[i]))) all = false;
+    }
+    await fredSay(all ? ((maps.length > 1 && ses.approvedTextMany) || ses.approvedText) : ses.notApprovedText, run);
+    await finalQuestion(run, ses);
+    await fredSay(all ? ses.thanksYes : ses.thanksFix, run);
+    finish();
+  }
+  async function runModifica(run, ses) {
+    for (const line of ses.greeting) await fredSay(line, run);
+    const maps = personMaps();
+    let m = maps[0];
+    if (maps.length > 1) {
+      await fredSay(ses.askWhich, run);
+      const opts = [fill(ses.whichX, {}), fill(ses.whichY, { y: maps[1].label })];
+      const k = await choose(opts); guard(run); clearComposer(); addMsg("user", opts[k]);
+      m = maps[k];
+    }
+    diagramCard({ proc: m.proc, bpmn: true });
+    const res = await editMap(run, m.proc, { askSelect: ses.askSelect, memKey: m.key === "procY" ? "procY" : undefined });
+    if (res.changed) {
+      // se la mappa era già confermata, la versione nuova prende il suo posto
+      if (m.key === "procY" && state.memory.approvedProcY) { state.memory.approvedProcY = res.proc; saveSchema("schema_confermato_attivita", res.proc); }
+      if (m.key === "proc" && state.memory.approvedProc) { state.memory.approvedProc = res.proc; saveSchema("schema_confermato", res.proc); }
+      saveProgress();
+    }
+    await fredSay(res.changed ? ses.closing : ses.closingNone, run);
+    finish();
+  }
   async function runVerifica(run, ses) {
-    // si parte sempre dalla versione della persona, se l'ha già modificata; altrimenti dalla mappa di partenza
-    const mine = state.memory.proc;
-    const proc = FredDiagram.autoLayout(clone(mine || FLOW.process));
-    proc.nodes.forEach((n) => { delete n.isNew; });
-    const edited = mine && state.memory.lastChange && state.memory.lastChange.edits;
+    const maps = personMaps();
+    const edited = state.memory.lastChange && state.memory.lastChange.edits;
     const greeting = (edited && ses.greetingIfChange) ? ses.greetingIfChange : ses.greeting;
 
     if (ses.approval) {
       for (const line of greeting) await fredSay(line, run);
-      diagramCard({ proc: proc, bpmn: true });
-      await runApproval(run, ses, proc);
+      diagramCard({ proc: maps[0].proc, bpmn: true });
+      await runApproval(run, ses);
       return;
     }
-    for (const line of greeting.slice(0, -1)) await fredSay(line, run);
-    diagramCard({ proc: proc, bpmn: true });
-    await fredSay(greeting[greeting.length - 1], run);
-
     const yesLabel = ses.confirmLabel || "Sì, è così", noLabel = ses.rejectLabel || "Non proprio";
-    const ok = await new Promise((resolve) => actions([
-      { label: yesLabel, primary: true, onClick: () => resolve(true) },
-      { label: noLabel, onClick: () => resolve(false) }
-    ]));
-    guard(run);
-    clearComposer();
-    addMsg("user", ok ? yesLabel : noLabel);
-
-    if (ok) {
-      saveAnswer("verifica", "confermato");
-      if (ses.yesQuestion) await askQuestion(run, ses.yesQuestion, { ses: ses, proc: proc, node: null });
-      await finalQuestion(run, ses);
-      await fredSay(ses.thanksYes, run);
-      finish();
-      return;
+    let allOk = true;
+    for (let i = 0; i < maps.length; i++) {
+      const m = maps[i];
+      if (i === 0) for (const line of greeting.slice(0, -1)) await fredSay(line, run);
+      else await fredSay(fill(ses.nextMapLine || "Ora la mappa di «{y}».", { y: m.label }), run);
+      diagramCard({ proc: m.proc, bpmn: true });
+      await fredSay(greeting[greeting.length - 1], run);
+      const ok = await new Promise((resolve) => actions([
+        { label: yesLabel, primary: true, onClick: () => resolve(true) },
+        { label: noLabel, onClick: () => resolve(false) }
+      ]));
+      guard(run);
+      clearComposer();
+      addMsg("user", ok ? yesLabel : noLabel);
+      const vid = m.key === "procY" ? "verifica_attivita" : "verifica";
+      state.inY = m.key === "procY";
+      if (ok) {
+        saveAnswer(vid, "confermato");
+        if (ses.yesQuestion) await askQuestion(run, Object.assign({}, ses.yesQuestion, { id: ses.yesQuestion.id + (m.key === "procY" ? "-attivita" : "") }),
+                                                { ses: ses, proc: m.proc, node: null });
+      } else {
+        allOk = false;
+        saveAnswer(vid, "da correggere");
+        await editMap(run, m.proc, { askSelect: ses.askSelect, askHow: ses.askHow, memKey: m.key === "procY" ? "procY" : undefined });
+      }
+      state.inY = false;
     }
-
-    saveAnswer("verifica", "da correggere");
-    await editMap(run, proc, { askSelect: ses.askSelect, askHow: ses.askHow });
     await finalQuestion(run, ses);
-    await fredSay(ses.thanksFix, run);
+    await fredSay(allOk ? ses.thanksYes : ses.thanksFix, run);
     finish();
   }
 
@@ -1468,6 +1613,13 @@
 
   const FRED_STEPS = ["mercoledi", "venerdi", "mercoledi2", "venerdi2"];
   function alflyCount() { const s = FLOW.sessions.alfly; return (s && s.tappe) ? s.tappe.length : 1; }
+  // una domanda di Al Fly al giorno; con ?prova nell'indirizzo il limite non vale (per provare tutto subito)
+  const PROVA = /[?&]prova\b/.test(location.search);
+  function todayKey() { const d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+  function alflyWaits() {
+    const s = FLOW.sessions.alfly;
+    return !!(s && s.unaAlGiorno) && !PROVA && (state.memory.alflyTappa || 0) > 0 && state.memory.alflyGiorno === todayKey();
+  }
   function alflyIndex() { return Math.min(state.memory.alflyTappa || 0, alflyCount() - 1); }
   const nextFredStep = () => FRED_STEPS.find((m) => !state.doneSteps[m]) || null;
   function renderHome() {
@@ -1479,13 +1631,16 @@
                                                             : "Completato ✓";
     fredCard.disabled = !next;
     const alReady = !!state.memory.approvedProc && !state.doneSteps.alfly;
-    alCard.disabled = !alReady;
+    const alWait = alReady && alflyWaits();
+    alCard.disabled = !alReady || alWait;
     const alT = alflyIndex(), alN = alflyCount();
     alCard.querySelector(".crew-meta").textContent = state.doneSteps.alfly ? "Completato ✓"
       : !alReady ? "Disponibile dopo aver confermato la mappa con Fred"
+      : alWait ? "Prossima domanda domani (tappa " + (alT + 1) + " di " + alN + ")"
       : alT ? "Riprendi: tappa " + (alT + 1) + " di " + alN
       : alN + " tappe brevi, dalla tua mappa confermata";
     document.getElementById("homeCode").textContent = profile ? "Il tuo codice di test: " + profile.codice : "";
+    document.getElementById("homeEditMap").hidden = !state.memory.proc;
   }
 
   function goHome() {
@@ -1504,6 +1659,7 @@
     if (b.disabled) return;
     startFromHome(b.dataset.start === "mercoledi" ? (nextFredStep() || "venerdi2") : b.dataset.start);
   }));
+  document.getElementById("homeEditMap").addEventListener("click", () => startFromHome("modifica"));
   homeEl.querySelectorAll("[data-crew]").forEach((img) => {
     img.src = { alfly: ASSETS.alflyAvatar, ally: ASSETS.allyAvatar, rose: ASSETS.roseAvatar }[img.dataset.crew] || ASSETS.avatar;
   });
@@ -1790,6 +1946,7 @@
       const flow = ses.type === "verifica" ? (r) => runVerifica(r, ses)
         : ses.type === "esplorazione" ? (r) => runEsplorazione(r, ses)
         : ses.type === "libero" ? runLibero
+        : ses.type === "modifica" ? (r) => runModifica(r, ses)
         : (r) => runDomande(r, ses);
       flow(run).catch((err) => {
         if (err && err.message === "demo interrotta") return; // demo riavviata: tutto normale

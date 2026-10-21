@@ -1263,7 +1263,7 @@
     ui.badge.hidden = true;
     ui.teaser.hidden = true;
     const btns = [{ label: "Torna all'equipaggio", primary: true, onClick: goHome }];
-    if (!gate) btns.push({ label: "Un'altra domanda adesso (prova)", onClick: () => startFromHome("alfly") });
+    if (!gate) btns.push({ label: "Un'altra domanda adesso", onClick: () => startFromHome("alfly") });
     actions(btns);
   }
 

@@ -326,7 +326,7 @@ window.FRED_FLOW = {
       // saluti delle tappe successive alla prima, uno per tappa (si ripetono in giro se le tappe sono di più)
       "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!", "Quota di crociera raggiunta!", "Ultimo controllo prima dell'atterraggio!"],
       // una tappa al giorno: la successiva si apre il giorno dopo
-      "unaAlGiorno": true,
+      "unaAlGiorno": false,   // SBLOCCATO per le prove: rimettere true per una domanda al giorno
       "closingDay": "Grazie! Per oggi è tutto: domani ti faccio la prossima domanda. Riparto.",
       "closingLast": "Grazie! Per questa mappa le domande sono finite. Riparto.",
       "questions": [

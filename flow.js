@@ -38,7 +38,8 @@ window.FRED_FLOW = {
       "teaser": "Fred ha qualche domanda per te",
       "greeting": [
         "Ciao! Sono Fred Quenza, il radiofonista dell'equipaggio di Al Volo.",
-        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci."
+        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci.",
+        "Prima di cominciare: la mappa che costruiremo potrai modificarla in qualsiasi momento, anche dalla pagina dell'equipaggio con «Modifica la tua mappa»."
       ],
       "questions": [
         {
@@ -52,7 +53,7 @@ window.FRED_FLOW = {
         {
           "id": "persone",
           "type": "open",
-          "text": "Quante persone sono coinvolte nel processo e con quali ruoli?",
+          "text": "Quante persone sono coinvolte {in_attivita} e con quali ruoli?",
           "placeholder": "Scrivi qui…"
         },
         {
@@ -64,17 +65,6 @@ window.FRED_FLOW = {
           "doneLabel": "Fatto"
         },
         {
-          "id": "ruolo-focus",
-          "type": "pickRole",
-          "text": "Quale ruolo vuoi analizzare?"
-        },
-        {
-          "id": "attivita-focus",
-          "type": "pickActivity",
-          "text": "Quale delle attività di «{ruolo}» vuoi approfondire? Toccala nella mappa o scegli qui sotto.",
-          "intro": "Approfondiamo «{passaggio}»."
-        },
-        {
           "id": "aggiunte",
           "type": "open",
           "optional": true,
@@ -82,9 +72,48 @@ window.FRED_FLOW = {
           "placeholder": "Scrivi qui…"
         },
         {
+          "id": "attivita-focus",
+          "type": "pickActivity",
+          "text": "Quale delle attività tracciate sopra vuoi approfondire? Seleziona nella mappa.",
+          "followUps": [
+            {
+              "id": "attivita-focus-motivo",
+              "type": "open",
+              "text": "Perché? Motiva brevemente la risposta.",
+              "placeholder": "Scrivi qui…"
+            }
+          ]
+        },
+        {
+          "id": "racconto-attivita",
+          "map": "y",
+          "type": "steps",
+          "text": "Puoi descrivere l'attività «{y}» passaggio per passaggio, dall'inizio alla fine?",
+          "hint": "Scrivi un passaggio alla volta e premi Invio: ognuno diventa un riquadro della mappa, con le tue parole.",
+          "placeholder": "Passaggio 1…",
+          "doneLabel": "Ho finito"
+        },
+        {
+          "id": "persone-attivita",
+          "map": "y",
+          "type": "open",
+          "text": "Quante persone sono coinvolte in «{y}» e con quali ruoli?",
+          "placeholder": "Scrivi qui…"
+        },
+        {
+          "id": "persone-mappa-attivita",
+          "map": "y",
+          "type": "assignRoles",
+          "text": "Collocale nella mappa: per ogni passaggio, indica chi lo fa.",
+          "noneLabel": "Non saprei",
+          "placeholder": "Scrivi il ruolo…",
+          "doneLabel": "Fatto"
+        },
+        {
           "id": "variazioni",
           "type": "choice",
-          "text": "Si svolge sempre allo stesso modo?",
+          "map": "y",
+          "text": "L'attività «{y}» si svolge sempre allo stesso modo?",
           "options": [
             "Sì",
             "No"
@@ -94,7 +123,7 @@ window.FRED_FLOW = {
               {
                 "id": "variazioni-quali",
                 "type": "open",
-                "text": "Quali variazioni possono esserci? Da cosa dipendono?",
+                "text": "Quali variazioni possono esserci? Elenca. Da cosa dipendono?",
                 "placeholder": "Scrivi qui…"
               }
             ]
@@ -125,7 +154,8 @@ window.FRED_FLOW = {
         "Radio di bordo a rapporto! Ecco la mappa {di_attivita}.",
         "Il processo così mappato è corretto?"
       ],
-      "askSelect": "Segnala il passaggio errato: toccalo nella mappa.",
+      "askSelect": "Segnala il passaggio errato e correggi secondo la tua prospettiva: toccalo nella mappa.",
+      "nextMapLine": "Ora la mappa dell'attività «{y}».",
       "askHow": "Correggilo secondo la tua prospettiva.",
       "howPlaceholder": "Scrivi qui…",
       "processKey": "process",
@@ -170,35 +200,47 @@ window.FRED_FLOW = {
             "No"
           ],
           "askSelect": "Tocca nella mappa il passaggio da cambiare.",
+          "askWhich": "Quale mappa vuoi cambiare?",
+          "whichX": "La mappa {di_attivita}",
+          "whichY": "La mappa dell'attività «{y}»",
           "askHow": "Descrivi il cambiamento secondo la tua prospettiva."
         },
         {
           "id": "normative",
           "type": "open",
-          "text": "A quali normative o documentazione interna aziendale fa riferimento la tua attività?",
+          "text": "A quali normative/documentazione interna aziendale fa riferimento la tua attività?",
           "placeholder": "Scrivi qui…"
         },
         {
           "id": "precedenti",
-          "type": "open",
-          "text": "Quali sono le attività precedenti alla tua? Elencale brevemente.",
-          "placeholder": "Scrivi qui…"
+          "type": "contextSteps",
+          "side": "before",
+          "text": "Quali sono le attività precedenti alla tua? Elenca brevemente.",
+          "hint": "Scrivi un'attività alla volta e premi Invio: le aggiungo alla mappa, prima dell'inizio.",
+          "placeholder": "Attività 1…",
+          "noneLabel": "Nessuna",
+          "doneLabel": "Fatto"
         },
         {
           "id": "successive",
-          "type": "open",
-          "text": "Quali quelle successive? Elencale brevemente.",
-          "placeholder": "Scrivi qui…"
+          "type": "contextSteps",
+          "side": "after",
+          "text": "Quali quelle successive? Elenca brevemente.",
+          "hint": "Scrivi un'attività alla volta e premi Invio: le aggiungo alla mappa, dopo la fine.",
+          "placeholder": "Attività 1…",
+          "noneLabel": "Nessuna",
+          "doneLabel": "Fatto"
         },
         {
-          "id": "strategiche",
+          "id": "critiche",
           "type": "selectSteps",
-          "text": "Quali attività, se ce ne sono, tra quelle precedenti e successive sono strategiche per l'attività da te svolta? Indicale nella mappa, poi premi «Fatto».",
+          "text": "Quali attività, se ce ne sono, tra quelle precedenti e successive sono critiche* per l'attività da te svolta? Indicale nella mappa e premi «Fatto», poi motiva.",
+          "note": "* È critica un'attività le cui inefficienze producono conseguenze rilevanti sull'efficacia, sui tempi, sui costi, sulla qualità o sulla continuità del processo considerato.",
           "noneLabel": "Nessuna",
           "doneLabel": "Fatto",
           "followUps": [
             {
-              "id": "strategiche-motivo",
+              "id": "critiche-motivo",
               "type": "open",
               "text": "Motiva la tua scelta.",
               "placeholder": "Scrivi qui…"
@@ -254,10 +296,12 @@ window.FRED_FLOW = {
         "placeholder": "Scrivi qui…"
       },
       "approval": true,
-      "approvalQuestion": "Conferma la mappa: se c'è qualche errore, modificala secondo la tua prospettiva!",
+      "approvalQuestion": "Conferma la mappa, se c'è qualche errore modificala secondo la tua prospettiva!",
+      "nextMapLine": "Ora la mappa dell'attività «{y}».",
       "approveLabel": "Confermo",
       "notYetLabel": "Voglio modificarla",
-      "approvedText": "Grazie. Lo schema è registrato come confermato da te.",
+      "approvedText": "Grazie. La mappa è registrata come confermata da te.",
+      "approvedTextMany": "Grazie. Le mappe sono registrate come confermate da te.",
       "notApprovedText": "Grazie. Ho registrato le tue correzioni.",
       "maxRounds": 3
     },
@@ -393,6 +437,20 @@ window.FRED_FLOW = {
         "id": "alfly",
         "name": "Al Fly"
       }
+    },
+
+    // La persona riapre la sua mappa quando vuole, dalla pagina dell'equipaggio
+    modifica: {
+      "type": "modifica",
+      "dayLabel": "La tua mappa",
+      "teaser": "Modifica la tua mappa",
+      "greeting": ["Radio di bordo in ascolto: ecco la tua mappa."],
+      "askWhich": "Quale mappa vuoi modificare?",
+      "whichX": "La mappa {di_attivita}",
+      "whichY": "La mappa dell'attività «{y}»",
+      "askSelect": "Tocca nella mappa il passaggio da modificare.",
+      "closing": "Fatto: la mappa è aggiornata.",
+      "closingNone": "Va bene, la mappa resta com'è."
     },
 
     // Modalità libera: il ciclo iterativo con il modello linguistico

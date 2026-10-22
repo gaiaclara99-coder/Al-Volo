@@ -315,6 +315,8 @@ window.FRED_FLOW = {
         "Ciao! Sono Al Fly, il pilota di Al Volo."
       ],
       "intro": "Questa mappa unisce le mappe {di_attivita} di {n} colleghi, tu compreso. Il colore dice in quante mappe compare ogni passaggio: verde in quasi tutte, arancio in alcune, rosso in poche.",
+      "introOthers": "Questa mappa unisce le mappe {di_attivita} confermate da {n} colleghi. Il colore dice in quante mappe compare ogni passaggio: verde in quasi tutte, arancio in alcune, rosso in poche.",
+      "introExample": "Questa è una mappa di esempio: quando i colleghi avranno confermato le loro mappe con Fred, qui vedrai la mappa che le unisce.",
       "introAlone": "Questa è la mappa {di_attivita}. Per ora è l'unica confermata: quando arriveranno quelle dei colleghi, qui le vedrai unite.",
       "thinkingAggregate": "Al Fly sta unendo le mappe dei colleghi…",
       "askEdit": "Vuoi modificare qualcosa in questa mappa?",
@@ -326,6 +328,8 @@ window.FRED_FLOW = {
       // saluti delle tappe successive alla prima, uno per tappa (si ripetono in giro se le tappe sono di più)
       "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!", "Quota di crociera raggiunta!", "Ultimo controllo prima dell'atterraggio!"],
       // una tappa al giorno: la successiva si apre il giorno dopo
+      // APERTO SUBITO per le prove: Al Fly si usa anche senza aver fatto Fred (rimettere false a fine prova)
+      "apertoSubito": true,
       "unaAlGiorno": false,   // SBLOCCATO per le prove: rimettere true per una domanda al giorno
       "closingDay": "Grazie! Per oggi è tutto: domani ti faccio la prossima domanda. Riparto.",
       "closingLast": "Grazie! Per questa mappa le domande sono finite. Riparto.",
@@ -514,6 +518,193 @@ window.FRED_FLOW = {
       "character": {
         "id": "alfly",
         "name": "Al Fly"
+      }
+    },
+
+    // Ally Fly: aperta da subito; la persona sceglie un passaggio e risponde ai blocchi A-D
+    ally: {
+      "type": "ally",
+      "dayLabel": "Un passaggio alla volta",
+      "teaser": "Ally Fly ha qualche domanda per te",
+      "greeting": [
+        "Ciao! Sono Ally Fly, pilota di Al Volo.",
+        "Guardiamo insieme un passaggio del lavoro: ti faccio qualche domanda su come si svolge. Rispondi con le parole che preferisci."
+      ],
+      "greetingAgain": [
+        "Ally Fly in cabina: ripartiamo!"
+      ],
+      "thinkingAggregate": "Ally Fly sta preparando la mappa…",
+      "askStep": "Quale passaggio vuoi guardare con me? Toccalo nella mappa.",
+      "askStepText": "Di quale passaggio del tuo lavoro vuoi parlare? Scrivilo in poche parole.",
+      "stepLine": "Parliamo di «{passaggio}».",
+      "organizzative": [
+        "Dall'attesa di una persona, di un'approvazione o di un altro reparto",
+        "Dalla quantità di lavoro rispetto alle persone disponibili",
+        "Da come arrivano materiali o oggetti (imballi, consegne, spazi)"
+      ],
+      "closing": "Grazie! Per questo passaggio le domande sono finite.",
+      "againLabel": "Guarda un altro passaggio",
+      "blocchi": [
+        {
+          "id": "A",
+          "titolo": "Di che natura è il problema",
+          "questions": [
+            {
+              "id": "A1",
+              "type": "multiChoice",
+              "text": "Da cosa dipende soprattutto? Puoi scegliere più risposte.",
+              "options": [
+                "Dal tempo per cercare, ricopiare o controllare informazioni",
+                "Dall'attesa di una persona, di un'approvazione o di un altro reparto",
+                "Dalla quantità di lavoro rispetto alle persone disponibili",
+                "Da come arrivano materiali o oggetti (imballi, consegne, spazi)",
+                "Da informazioni poco chiare o incomplete"
+              ],
+              "placeholder": "Altro…",
+              "doneLabel": "Fatto"
+            }
+          ]
+        },
+        {
+          "id": "B",
+          "titolo": "Regole fisse o giudizio",
+          "questions": [
+            {
+              "id": "B1",
+              "type": "choice",
+              "text": "In questo passaggio si fanno sempre le stesse operazioni, nello stesso ordine?",
+              "options": [
+                "Sempre",
+                "Quasi sempre",
+                "Dipende dal caso",
+                "Ogni volta è diverso"
+              ]
+            },
+            {
+              "id": "B2",
+              "type": "choice",
+              "text": "Per decidere cosa fare, ti basi su indicazioni scritte (procedure, tabelle, soglie) o sull'esperienza?",
+              "options": [
+                "Indicazioni scritte",
+                "Un po' tutte e due",
+                "Soprattutto l'esperienza"
+              ]
+            },
+            {
+              "id": "B3",
+              "type": "multiChoice",
+              "text": "In che forma ti arrivano le informazioni che usi? Puoi scegliere più risposte.",
+              "options": [
+                "Campi del gestionale o di una tabella",
+                "File Excel",
+                "Email o messaggi scritti a parole",
+                "Documenti PDF o cartacei",
+                "Telefonate o a voce",
+                "Foto, oggetti o merce da guardare"
+              ],
+              "placeholder": "Altro (facoltativo)…",
+              "doneLabel": "Fatto"
+            },
+            {
+              "id": "B4",
+              "type": "choice",
+              "text": "A un collega appena arrivato, quanto tempo servirebbe per imparare a farlo bene?",
+              "options": [
+                "Pochi minuti",
+                "Qualche giorno",
+                "Settimane o mesi"
+              ]
+            },
+            {
+              "id": "B5",
+              "type": "choice",
+              "text": "Capitano casi fuori dal solito?",
+              "options": [
+                "Quasi mai",
+                "Ogni tanto",
+                "Spesso"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "C",
+          "titolo": "Obiettivo chiaro",
+          "questions": [
+            {
+              "id": "C1",
+              "type": "open",
+              "text": "Quando questo passaggio è fatto bene, come te ne accorgi?",
+              "placeholder": "Scrivi qui…"
+            },
+            {
+              "id": "C2",
+              "type": "choice",
+              "text": "Il risultato è sempre dello stesso tipo, ad esempio un modulo compilato, un sì/no o un numero, o cambia ogni volta?",
+              "options": [
+                "Sempre dello stesso tipo",
+                "Cambia"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "D",
+          "titolo": "Conseguenze e tempi",
+          "questions": [
+            {
+              "id": "D1",
+              "type": "choice",
+              "text": "Se in questo passaggio scappa un errore, cosa succede?",
+              "options": [
+                "Quasi nulla, si sistema subito",
+                "Ritardi o lavoro in più",
+                "Conseguenze serie (costi, sicurezza, clienti, norme)"
+              ]
+            },
+            {
+              "id": "D2",
+              "type": "choice",
+              "text": "Un errore si scopre facilmente?",
+              "options": [
+                "Subito",
+                "Dopo un po'",
+                "Difficilmente"
+              ]
+            },
+            {
+              "id": "D3",
+              "type": "choice",
+              "text": "Quanto tempo c'è, di solito, tra quando arriva la richiesta e quando serve il risultato?",
+              "options": [
+                "Minuti",
+                "Ore",
+                "Giorni"
+              ]
+            },
+            {
+              "id": "D4",
+              "type": "choice",
+              "text": "Oggi qualcuno deve dare l'ok finale?",
+              "options": [
+                "Nessuno",
+                "Lo do io",
+                "Un'altra persona"
+              ]
+            },
+            {
+              "id": "D5",
+              "type": "open",
+              "text": "Se questo passaggio cambiasse, cosa vorresti che restasse com'è?",
+              "placeholder": "Scrivi qui…",
+              "optional": true
+            }
+          ]
+        }
+      ],
+      "character": {
+        "id": "ally",
+        "name": "Ally Fly"
       }
     },
 

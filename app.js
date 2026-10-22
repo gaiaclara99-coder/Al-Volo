@@ -134,7 +134,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     }).filter(Boolean).join(" → ");
   }
   function currentMapText(mapKey) {
-    const k = mapKey || (state.mode === "alfly" ? "alflyProc" : state.inY ? "procY" : "proc");
+    const k = mapKey || (state.mode === "alfly" ? "alflyProc" : state.mode === "ally" ? "allyProc" : state.inY ? "procY" : "proc");
     return mapText(state.memory[k]);
   }
   function saveAnswer(key, value, steps, mapKey) {
@@ -145,7 +145,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       personaggio: characterName(), tappa: (FLOW.sessions[state.mode] || {}).dayLabel || state.mode,
       domanda_id: key, domanda: state.lastFredText || "",
       risposta: value == null ? "" : (typeof value === "string" ? value : JSON.stringify(value)),
-      passaggi: steps || "",
+      passaggi: steps || (state.mode === "ally" && state.allyStep) || "",
       mappa: currentMapText(mapKey)
     };
     const q = load(QUEUE, []); q.push(row); store(QUEUE, q);
@@ -1203,13 +1203,16 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     } catch (e) { return []; }
   }
   async function buildAggregate(run, ses) {
-    const own = state.memory.approvedProc || state.memory.proc || FLOW.process;
+    const own = state.memory.approvedProc || state.memory.proc || null;   // senza Fred la persona non ha una sua mappa
     const wait = thinking(ses.thinkingAggregate || "Al Fly sta unendo le mappe…");
     const remote = await fetchMaps();
     wait.remove(); guard(run);
     const others = remote.filter((m) => m && m.mappa && Array.isArray(m.mappa.nodes) && (!profile || m.codice !== profile.codice))
                          .map((m) => m.mappa);
-    return aggregateMaps([own].concat(others), ses);
+    const maps = (own ? [own] : []).concat(others);
+    const agg = aggregateMaps(maps.length ? maps : [FLOW.process], ses);
+    agg.own = !!own; agg.example = !maps.length;
+    return agg;
   }
 
   async function runEsplorazione(run, ses) {
@@ -1225,7 +1228,10 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       state.memory.alflyProc = proc;
       saveProgress();
       const n = proc.total || 1;
-      await fredSay(fill(n > 1 ? ses.intro : (ses.introAlone || ses.intro), { n: n }), run);
+      const introTpl = proc.example ? (ses.introExample || ses.introAlone)
+        : !proc.own ? (ses.introOthers || ses.intro)
+        : n > 1 ? ses.intro : (ses.introAlone || ses.intro);
+      await fredSay(fill(introTpl, { n: n }), run);
       diagramCard({ proc: proc });
       saveAnswer("mappa_aggregata", JSON.stringify({ mappe: n, nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane], quante: x.count })) }));
       // la persona può modificare ancora una volta la mappa
@@ -1321,6 +1327,60 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     await finalQuestion(run, ses);
     await fredSay(all ? ses.thanksYes : ses.thanksFix, run);
     finish();
+  }
+  /* ---------------- Ally Fly: un passaggio, quattro blocchi di domande ---------------- */
+  async function runAlly(run, ses) {
+    for (const line of ses.greeting) await fredSay(line, run);
+    // la mappa: quella della persona; se non l'ha ancora fatta con Fred, quella che unisce le mappe dei colleghi
+    let proc = state.memory.approvedProc || state.memory.proc || null;
+    if (!proc) {
+      const agg = await buildAggregate(run, ses);
+      if (!agg.example) proc = agg;
+    }
+    let label = "";
+    if (proc) {
+      proc = FredDiagram.autoLayout(clone(proc));
+      state.memory.allyProc = proc;
+      await fredSay(ses.askStep, run);
+      const node = await new Promise((resolve) => {
+        const card = diagramCard({ proc: proc, selectedIds: [], onSelect: (n) => { card._freeze([n.id]); resolve(n); } });
+      });
+      guard(run); clearComposer();
+      label = node.label;
+      addMsg("user", "“" + label + "”");
+    } else {
+      // nessuna mappa ancora disponibile: la persona scrive il passaggio
+      await fredSay(ses.askStepText, run);
+      const ans = await askText({ placeholder: "Scrivi qui…" });
+      guard(run); clearComposer();
+      label = ans.text; addMsg("user", label);
+    }
+    state.allyStep = label;
+    saveAnswer("ally_passaggio", label, label);
+    saveProgress();
+    await fredSay(fill(ses.stepLine, { passaggio: label }), run);
+    const ctx = { ses: ses, proc: proc, node: null };
+    const org = ses.organizzative || [];
+    for (const b of ses.blocchi) {
+      if (b.id !== "A" && b.id !== "D" && ctx.soloOrganizzativo) continue;   // problema organizzativo: si passa al blocco D
+      for (const q of b.questions) await askQuestion(run, q, ctx);
+      if (b.id === "A") {
+        // solo attese, carico di lavoro o materiali (e niente "Altro"): si passa al blocco D
+        const a = state.answers["A1"] || "";
+        const picked = (ses.blocchi[0].questions[0].options || []).filter((o) => a.indexOf(o) >= 0);
+        let rest = a; picked.forEach((o) => { rest = rest.split(o).join(""); });   // resta solo l'eventuale "Altro"
+        ctx.soloOrganizzativo = picked.length > 0 && !rest.replace(/[,\s]/g, "") && picked.every((o) => org.indexOf(o) >= 0);
+        saveAnswer("ally_natura", ctx.soloOrganizzativo ? "organizzativo (si passa al blocco D)" : "da approfondire (blocchi B, C, D)");
+      }
+    }
+    await fredSay(ses.closing, run);
+    state.done = true;
+    state.doneSteps.ally = (state.doneSteps.ally || 0) + 1;
+    state.allyStep = null;
+    saveProgress();
+    ui.badge.hidden = true; ui.teaser.hidden = true;
+    actions([{ label: ses.againLabel || "Guarda un altro passaggio", primary: true, onClick: () => startFromHome("ally") },
+             { label: "Torna all'equipaggio", onClick: goHome }]);
   }
   async function runModifica(run, ses) {
     for (const line of ses.greeting) await fredSay(line, run);
@@ -1631,7 +1691,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     fredCard.querySelector(".crew-meta").textContent = next ? (doneCount ? "Riprendi: tappa " + (doneCount + 1) + " di 4" : "4 tappe")
                                                             : "Completato ✓";
     fredCard.disabled = !next;
-    const alReady = !!state.memory.approvedProc && !state.doneSteps.alfly;
+    const alOpen = !!(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito);
+    const alReady = (alOpen || !!state.memory.approvedProc) && !state.doneSteps.alfly;
     const alWait = alReady && alflyWaits();
     alCard.disabled = !alReady || alWait;
     const alT = alflyIndex(), alN = alflyCount();
@@ -1639,7 +1700,12 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       : !alReady ? "Disponibile dopo aver confermato la mappa con Fred"
       : alWait ? "Prossima domanda domani (tappa " + (alT + 1) + " di " + alN + ")"
       : alT ? "Riprendi: tappa " + (alT + 1) + " di " + alN
-      : alN + " tappe brevi, dalla tua mappa confermata";
+      : alN + (state.memory.approvedProc ? " tappe brevi, dalla tua mappa confermata" : " tappe brevi, una domanda per volta");
+    const allyCard = homeEl.querySelector('[data-start="ally"]');
+    if (allyCard) {
+      const nA = Number(state.doneSteps.ally) || 0;
+      allyCard.querySelector(".crew-meta").textContent = nA ? "Passaggi guardati: " + nA + " · tocca per un altro" : "Un passaggio alla volta";
+    }
     document.getElementById("homeCode").textContent = profile ? "Il tuo codice di test: " + profile.codice : "";
     const editBtn = document.getElementById("homeEditMap"); if (editBtn) editBtn.hidden = !state.memory.proc;
   }
@@ -1931,7 +1997,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       saveProgress();
       const i = PHONE_PATH.indexOf(state.mode);
       let next = i >= 0 && i < PHONE_PATH.length - 1 ? PHONE_PATH[i + 1] : null;
-      if (next === "alfly" && !state.memory.approvedProc) next = null;     // Al Fly parte solo da una mappa confermata
+      if (next === "alfly" && !state.memory.approvedProc && !(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito)) next = null;     // Al Fly parte solo da una mappa confermata
       const step = next && FLOW.tour.find((t) => t.mode === next);
       const buttons = [];
       if (step) buttons.push({ label: "Prossima tappa: " + step.title, primary: true, onClick: () => startFromHome(next) });
@@ -1958,6 +2024,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
         : ses.type === "esplorazione" ? (r) => runEsplorazione(r, ses)
         : ses.type === "libero" ? runLibero
         : ses.type === "modifica" ? (r) => runModifica(r, ses)
+        : ses.type === "ally" ? (r) => runAlly(r, ses)
         : (r) => runDomande(r, ses);
       flow(run).catch((err) => {
         if (err && err.message === "demo interrotta") return; // demo riavviata: tutto normale
@@ -1987,11 +2054,10 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     return (ses.character && ses.character.id) || "fred";
   }
   function applyCharacter(ses) {
-    const alfly = ses.character && ses.character.id === "alfly";
-    document.querySelectorAll('[data-asset="avatar"]').forEach((img) => {
-      img.src = alfly ? ASSETS.alflyAvatar : ASSETS.avatar;
-    });
-    ui.charName.textContent = alfly ? ses.character.name : FLOW.character.name;
+    const id = ses.character && ses.character.id;
+    const src = { alfly: ASSETS.alflyAvatar, ally: ASSETS.allyAvatar }[id] || ASSETS.avatar;
+    document.querySelectorAll('[data-asset="avatar"]').forEach((img) => { img.src = src; });
+    ui.charName.textContent = id ? ses.character.name : FLOW.character.name;
   }
 
   function reset(mode) {

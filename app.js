@@ -134,7 +134,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     }).filter(Boolean).join(" → ");
   }
   function currentMapText(mapKey) {
-    const k = mapKey || (state.mode === "alfly" ? "alflyProc" : state.mode === "ally" ? "allyProc" : state.inY ? "procY" : "proc");
+    const k = mapKey || (state.mode === "alfly" ? "alflyProc" : state.mode === "ally" ? "allyProc" : state.mode === "concordata" ? "procC" : state.inY ? "procY" : "proc");
     return mapText(state.memory[k]);
   }
   function saveAnswer(key, value, steps, mapKey) {
@@ -1202,6 +1202,27 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       return (data && data.ok && Array.isArray(data.mappe)) ? data.mappe : [];
     } catch (e) { return []; }
   }
+  async function fetchConcordata() {
+    if (!endpointOk()) return null;
+    try {
+      const res = await fetch(PILOT.endpoint + "?concordata=1", { method: "GET", cache: "no-store" });
+      const data = await res.json();
+      return (data && data.ok && data.mappa && Array.isArray(data.mappa.nodes)) ? data.mappa : null;
+    } catch (e) { return null; }
+  }
+  // la mappa concordata dall'ufficio: l'ultima arrivata nel foglio, o quella scritta su questo telefono (null se non c'è)
+  async function concordataMap(run, waitText) {
+    const wait0 = thinking(waitText || "Sto preparando la mappa…");
+    const remoteC = await fetchConcordata();
+    wait0.remove(); guard(run);
+    if (remoteC) state.concordataOk = true;
+    const c = remoteC || state.memory.procC;
+    if (!c) return null;
+    const p = FredDiagram.autoLayout(clone(c));
+    p.nodes.forEach((n) => { delete n.isNew; delete n.level; delete n.count; });
+    p.concordata = true; p.own = true; p.total = 1;
+    return p;
+  }
   async function buildAggregate(run, ses) {
     const own = state.memory.approvedProc || state.memory.proc || null;   // senza Fred la persona non ha una sua mappa
     const wait = thinking(ses.thinkingAggregate || "Al Fly sta unendo le mappe…");
@@ -1221,19 +1242,26 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const qs = ses.questions.filter((q) => groups[i].indexOf(q.id) >= 0);
     const usesMap = (q) => ["selectStep", "selectSteps", "mapChange"].indexOf(q.type) >= 0;
     let proc;
-    if (i === 0 || !state.memory.alflyProc) {
+    if (i === 0 || !state.memory.alflyProc || !state.memory.alflyProc.concordata) {
       scene();
       for (const line of ses.greeting) await fredSay(line, run);
-      proc = await buildAggregate(run, ses);
+      proc = await concordataMap(run, ses.thinkingAggregate);
+      if (!proc) {
+        // Al Fly lavora solo sulla mappa concordata: finché non c'è, si torna più tardi
+        await fredSay(ses.waitConcordata || "La mappa concordata dal tuo ufficio non c'è ancora. Torna quando il o la responsabile l'avrà compilata!", run);
+        state.done = true; ui.badge.hidden = true; ui.teaser.hidden = true;
+        actions([{ label: "Torna all'equipaggio", primary: true, onClick: goHome }]);
+        return;
+      }
       state.memory.alflyProc = proc;
       saveProgress();
       const n = proc.total || 1;
-      const introTpl = proc.example ? (ses.introExample || ses.introAlone)
+      const introTpl = proc.concordata ? (ses.introConcordata || ses.intro) : proc.example ? (ses.introExample || ses.introAlone)
         : !proc.own ? (ses.introOthers || ses.intro)
         : n > 1 ? ses.intro : (ses.introAlone || ses.intro);
       await fredSay(fill(introTpl, { n: n }), run);
       diagramCard({ proc: proc });
-      saveAnswer("mappa_aggregata", JSON.stringify({ mappe: n, nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane], quante: x.count })) }));
+      saveAnswer(proc.concordata ? "mappa_concordata_usata" : "mappa_aggregata", JSON.stringify({ mappe: n, nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane], quante: x.count })) }));
       // la persona può modificare ancora una volta la mappa
       await fredSay(ses.askEdit || "Vuoi modificare qualcosa in questa mappa?", run);
       const edit = await new Promise((resolve) => actions([{ label: "Sì", primary: true, onClick: () => resolve(true) },
@@ -1243,7 +1271,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
         const res = await editMap(run, proc, { memKey: "alflyProc" });
         if (res.changed) {
           proc = res.proc;
-          saveAnswer("mappa_aggregata_modificata", JSON.stringify({ nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane] })) }));
+          saveAnswer(proc.concordata ? "mappa_concordata_modificata" : "mappa_aggregata_modificata", JSON.stringify({ nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane] })) }));
         }
       }
       await new Promise((resolve) => actions([{ label: "Va bene, iniziamo", primary: true, onClick: resolve },
@@ -1328,15 +1356,82 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     await fredSay(all ? ses.thanksYes : ses.thanksFix, run);
     finish();
   }
+  /* ---------------- Fred finito: la propria mappa, poi quella concordata ---------------- */
+  async function runVediMappe(run, ses) {
+    for (const line of ses.greeting) await fredSay(line, run);
+    const own = state.memory.approvedProc || state.memory.proc;
+    if (own) {
+      await fredSay(ses.ownLine, run);
+      const p = FredDiagram.autoLayout(clone(own)); p.nodes.forEach((n) => { delete n.isNew; });
+      diagramCard({ proc: p });
+      const y = state.memory.approvedProcY || state.memory.procY;
+      if (y) {
+        await fredSay(fill(ses.ownYLine, { y: (state.memory.focus || {}).label || "" }), run);
+        const py = FredDiagram.autoLayout(clone(y)); py.nodes.forEach((n) => { delete n.isNew; });
+        diagramCard({ proc: py });
+      }
+    }
+    const c = await concordataMap(run, ses.thinking);
+    if (c) { await fredSay(ses.concLine, run); diagramCard({ proc: c }); }
+    else await fredSay(ses.concNone, run);
+    state.done = true; ui.badge.hidden = true; ui.teaser.hidden = true;
+    actions([{ label: "Torna all'equipaggio", primary: true, onClick: goHome }]);
+  }
+
+  /* ---------------- Fred, tappa 5: la mappa concordata dall'ufficio ---------------- */
+  async function runConcordata(run, ses) {
+    for (const line of ses.greeting) await fredSay(line, run);
+    await fredSay(ses.askWho, run);
+    const who = await new Promise((resolve) => actions([{ label: ses.whoYes, primary: true, onClick: () => resolve(true) },
+                                                        { label: ses.whoNo, onClick: () => resolve(false) }]));
+    guard(run); clearComposer(); addMsg("user", who ? ses.whoYes : ses.whoNo);
+    saveAnswer("concordata-chi", who ? "scrive la mappa concordata" : "non la scrive");
+    if (!who) { await fredSay(ses.closingNo, run); finish(); return; }
+    // si scrive da zero, un passaggio alla volta, come nella tappa 1
+    await fredSay(fill(ses.steps.text, {}), run);
+    const steps = await askSteps(ses.steps);
+    guard(run); clearComposer();
+    addMsg("user", steps.map((s, i) => (i + 1) + ". " + s).join("\n"), "msg-list");
+    saveAnswer(ses.steps.id, steps.join("\n"));
+    let proc = procFromSteps(steps, "Mappa concordata – " + (PILOT.attivita || ""));
+    await fredSay(ses.roles.text, run);
+    const chosen = await askRoles(ses.roles, proc);
+    guard(run); clearComposer();
+    const lanes = [];
+    proc.nodes.forEach((n, k) => {
+      const r = chosen[k] === (ses.roles.noneLabel || "Non saprei") ? "Non indicato" : chosen[k];
+      let li = lanes.indexOf(r); if (li < 0) { lanes.push(r); li = lanes.length - 1; }
+      n.lane = li;
+    });
+    proc.lanes = lanes;
+    proc = FredDiagram.autoLayout(proc);
+    state.memory.procC = proc; saveProgress();
+    addMsg("user", proc.nodes.map((n) => "“" + n.label + "”: " + lanes[n.lane]).join("\n"), "msg-list");
+    saveAnswer(ses.roles.id, JSON.stringify(proc.nodes.map((n) => ({ passaggio: n.label, ruolo: lanes[n.lane] }))));
+    // conferma, con la possibilità di correggere
+    for (let round = 0; round < (ses.maxRounds || 5); round++) {
+      await fredSay(ses.approveText, run);
+      diagramCard({ proc: proc });
+      const ok = await new Promise((resolve) => actions([{ label: ses.approveLabel, primary: true, onClick: () => resolve(true) },
+                                                         { label: ses.notYetLabel, onClick: () => resolve(false) }]));
+      guard(run); clearComposer(); addMsg("user", ok ? ses.approveLabel : ses.notYetLabel);
+      if (ok) break;
+      const res = await editMap(run, proc, { askSelect: ses.askSelect, memKey: "procC" });
+      if (res.changed) proc = res.proc;
+    }
+    proc = clone(proc); proc.nodes.forEach((n) => { delete n.isNew; if (n.status === "verify") n.status = "confirmed"; });
+    state.memory.procC = proc; saveProgress();
+    saveSchema("schema_concordato", proc);
+    await fredSay(ses.closing, run);
+    finish();
+  }
+
   /* ---------------- Ally Fly: un passaggio, quattro blocchi di domande ---------------- */
   async function runAlly(run, ses) {
     for (const line of ses.greeting) await fredSay(line, run);
     // la mappa: quella della persona; se non l'ha ancora fatta con Fred, quella che unisce le mappe dei colleghi
     let proc = state.memory.approvedProc || state.memory.proc || null;
-    if (!proc) {
-      const agg = await buildAggregate(run, ses);
-      if (!agg.example) proc = agg;
-    }
+    if (!proc) proc = await concordataMap(run, ses.thinkingAggregate);
     let label = "";
     if (proc) {
       proc = FredDiagram.autoLayout(clone(proc));
@@ -1670,9 +1765,15 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   const isPhone = () => true;          // il pilota mostra sempre la versione per cellulare
   const homeEl = document.getElementById("home");
   // percorso sul cellulare: le tappe di Fred, poi Al Fly
-  const PHONE_PATH = ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "alfly"];
+  const PHONE_PATH = ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "concordata", "alfly"];
 
-  const FRED_STEPS = ["mercoledi", "venerdi", "mercoledi2", "venerdi2"];
+  const FRED_STEPS = ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "concordata"];
+  // la tappa 5 (mappa concordata) si apre dal giorno dopo la tappa 4
+  function concWaits() {
+    const s = FLOW.sessions.concordata;
+    return !!(s && s.giornoSeparato) && !PROVA && !!state.doneSteps.venerdi2 && !state.doneSteps.concordata &&
+      state.memory.tappa4Giorno === todayKey();
+  }
   function alflyCount() { const s = FLOW.sessions.alfly; return (s && s.tappe) ? s.tappe.length : 1; }
   // una domanda di Al Fly al giorno; con ?prova nell'indirizzo il limite non vale (per provare tutto subito)
   const PROVA = /[?&]prova\b/.test(location.search);
@@ -1688,19 +1789,25 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const alCard = homeEl.querySelector('[data-start="alfly"]');
     const next = nextFredStep();
     const doneCount = FRED_STEPS.filter((m) => state.doneSteps[m]).length;
-    fredCard.querySelector(".crew-meta").textContent = next ? (doneCount ? "Riprendi: tappa " + (doneCount + 1) + " di 4" : "4 tappe")
-                                                            : "Completato ✓";
-    fredCard.disabled = !next;
+    const nF = FRED_STEPS.length;
+    const fWait = next === "concordata" && concWaits();
+    fredCard.querySelector(".crew-meta").textContent = !next ? "Completato ✓ · tocca per vedere le mappe"
+      : fWait ? "Ultima tappa da domani (tappa " + nF + " di " + nF + ")"
+      : doneCount ? "Riprendi: tappa " + (doneCount + 1) + " di " + nF : nF + " tappe";
+    fredCard.disabled = !!next && fWait;
     const alOpen = !!(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito);
     const alReady = (alOpen || !!state.memory.approvedProc) && !state.doneSteps.alfly;
     const alWait = alReady && alflyWaits();
-    alCard.disabled = !alReady || alWait;
+    const noConc = alReady && !alflyIndex() && state.concordataOk === false && !state.memory.procC;
+    alCard.disabled = !alReady || alWait || noConc;
     const alT = alflyIndex(), alN = alflyCount();
     alCard.querySelector(".crew-meta").textContent = state.doneSteps.alfly ? "Completato ✓"
       : !alReady ? "Disponibile dopo aver confermato la mappa con Fred"
+      : noConc ? "Si apre quando c'è la mappa concordata dell'ufficio"
       : alWait ? "Prossima domanda domani (tappa " + (alT + 1) + " di " + alN + ")"
       : alT ? "Riprendi: tappa " + (alT + 1) + " di " + alN
-      : alN + (state.memory.approvedProc ? " tappe brevi, dalla tua mappa confermata" : " tappe brevi, una domanda per volta");
+      : alN + " tappe brevi, sulla mappa concordata";
+    checkConcordata();
     const allyCard = homeEl.querySelector('[data-start="ally"]');
     if (allyCard) {
       const nA = Number(state.doneSteps.ally) || 0;
@@ -1710,6 +1817,17 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const editBtn = document.getElementById("homeEditMap"); if (editBtn) editBtn.hidden = !state.memory.proc;
   }
 
+  // controlla (al massimo una volta al minuto) se nel foglio c'è già la mappa concordata
+  let concCheckedAt = 0;
+  function checkConcordata() {
+    if (!endpointOk()) { if (state.concordataOk == null && !state.memory.procC) state.concordataOk = false; return; }
+    if (Date.now() - concCheckedAt < 60000) return;
+    concCheckedAt = Date.now();
+    fetchConcordata().then((c) => {
+      const ok = !!c;
+      if (state.concordataOk !== ok) { state.concordataOk = ok; if (!homeEl.hidden) renderHome(); }
+    });
+  }
   function goHome() {
     renderHome();
     ui.popup.hidden = true;
@@ -1724,7 +1842,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   }
   homeEl.querySelectorAll("[data-start]").forEach((b) => b.addEventListener("click", () => {
     if (b.disabled) return;
-    startFromHome(b.dataset.start === "mercoledi" ? (nextFredStep() || "venerdi2") : b.dataset.start);
+    startFromHome(b.dataset.start === "mercoledi" ? (nextFredStep() || "mappe") : b.dataset.start);
   }));
   // il pulsante "Modifica la tua mappa": se l'index.html è di una versione precedente, lo crea qui
   (function () {
@@ -1996,7 +2114,9 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       // sul cellulare non c'è la barra della presentazione: la tappa successiva si apre da qui
       saveProgress();
       const i = PHONE_PATH.indexOf(state.mode);
+      if (state.mode === "venerdi2") { state.memory.tappa4Giorno = todayKey(); saveProgress(); }
       let next = i >= 0 && i < PHONE_PATH.length - 1 ? PHONE_PATH[i + 1] : null;
+      if (next === "concordata" && concWaits()) next = "alfly";            // l'ultima tappa di Fred arriva domani
       if (next === "alfly" && !state.memory.approvedProc && !(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito)) next = null;     // Al Fly parte solo da una mappa confermata
       const step = next && FLOW.tour.find((t) => t.mode === next);
       const buttons = [];
@@ -2025,6 +2145,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
         : ses.type === "libero" ? runLibero
         : ses.type === "modifica" ? (r) => runModifica(r, ses)
         : ses.type === "ally" ? (r) => runAlly(r, ses)
+        : ses.type === "concordata" ? (r) => runConcordata(r, ses)
+        : ses.type === "vediMappe" ? (r) => runVediMappe(r, ses)
         : (r) => runDomande(r, ses);
       flow(run).catch((err) => {
         if (err && err.message === "demo interrotta") return; // demo riavviata: tutto normale

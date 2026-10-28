@@ -34,7 +34,7 @@ window.FRED_FLOW = {
   sessions: {
     mercoledi: {
       "type": "domande",
-      "dayLabel": "Tappa 1 di 4",
+      "dayLabel": "Tappa 1 di 5",
       "teaser": "Fred ha qualche domanda per te",
       "greeting": [
         "Ciao! Sono Fred Quenza, il radiofonista dell'equipaggio di Al Volo.",
@@ -148,7 +148,7 @@ window.FRED_FLOW = {
 
     venerdi: {
       "type": "verifica",
-      "dayLabel": "Tappa 2 di 4",
+      "dayLabel": "Tappa 2 di 5",
       "teaser": "Fred ha uno schema da mostrarti",
       "greeting": [
         "Radio di bordo a rapporto! Ecco la mappa {di_attivita}.",
@@ -180,7 +180,7 @@ window.FRED_FLOW = {
 
     mercoledi2: {
       "type": "domande",
-      "dayLabel": "Tappa 3 di 4",
+      "dayLabel": "Tappa 3 di 5",
       "teaser": "Fred ha qualche altra domanda per te",
       "greeting": [
         "Qui Radio di bordo, mi ricevi? Passo.",
@@ -266,7 +266,7 @@ window.FRED_FLOW = {
 
     venerdi2: {
       "type": "verifica",
-      "dayLabel": "Tappa 4 di 4",
+      "dayLabel": "Tappa 4 di 5",
       "teaser": "Fred ha uno schema aggiornato da mostrarti",
       "greeting": [
         "Contatto radio ristabilito! Ecco la mappa {di_attivita}."
@@ -286,8 +286,8 @@ window.FRED_FLOW = {
       "askSelect": "Tocca nella mappa il passaggio da modificare.",
       "askHow": "Modificalo secondo la tua prospettiva.",
       "howPlaceholder": "Scrivi qui…",
-      "thanksFix": "Per {attivita} le domande sono finite.",
-      "thanksYes": "Per {attivita} le domande sono finite.",
+      "thanksFix": "Per la tua mappa le domande sono finite. Manca solo l'ultima tappa, da domani.",
+      "thanksYes": "Per la tua mappa le domande sono finite. Manca solo l'ultima tappa, da domani.",
       "finalQuestion": {
         "id": "aggiunte-finali",
         "type": "open",
@@ -306,6 +306,59 @@ window.FRED_FLOW = {
       "maxRounds": 3
     },
 
+    // Tappa 5 di Fred: in un giorno separato, una persona per ufficio scrive la mappa concordata; Al Fly parte da quella
+    concordata: {
+      "type": "concordata",
+      "dayLabel": "Tappa 5 di 5",
+      "teaser": "Fred ha l'ultima tappa per te",
+      "greeting": [
+        "Radio di bordo, ultima chiamata!",
+        "Questa è l'ultima tappa: la mappa {di_attivita} concordata con il tuo ufficio o la tua divisione."
+      ],
+      "askWho": "Sei tu la persona che scrive, per il tuo ufficio o la tua divisione, la mappa concordata con i colleghi?",
+      "whoYes": "Sì, la scrivo io",
+      "whoNo": "No",
+      "closingNo": "Va bene: la scriverà la persona indicata dal tuo ufficio. Grazie, con Fred hai finito!",
+      "steps": {
+        "id": "concordata-racconto",
+        "type": "steps",
+        "text": "Scrivi la mappa {di_attivita} così come l'avete concordata in ufficio: un passaggio alla volta, dall'inizio alla fine.",
+        "hint": "Scrivi un passaggio alla volta e premi Invio: ognuno diventa una fermata della mappa, con le vostre parole.",
+        "placeholder": "Passaggio 1…",
+        "doneLabel": "Ho finito"
+      },
+      "roles": {
+        "id": "concordata-ruoli",
+        "type": "assignRoles",
+        "text": "Per ogni passaggio, indica chi lo fa.",
+        "noneLabel": "Non saprei",
+        "placeholder": "Scrivi il ruolo…",
+        "doneLabel": "Fatto"
+      },
+      "approveText": "Ecco la mappa concordata. È corretta? Se c'è qualche errore, modificala.",
+      "approveLabel": "Confermo",
+      "notYetLabel": "Voglio modificarla",
+      "maxRounds": 5,
+      "askSelect": "Tocca nella mappa il passaggio da modificare.",
+      "closing": "Grazie! La mappa concordata è registrata: Al Fly partirà da questa per le sue domande.",
+      "giornoSeparato": true
+    },
+
+    // Fred finito: toccando la scheda si vedono la propria mappa e quella concordata
+    mappe: {
+      "type": "vediMappe",
+      "dayLabel": "Le tue mappe",
+      "teaser": "Le tue mappe",
+      "greeting": [
+        "Radio di bordo in ascolto: ecco le mappe."
+      ],
+      "ownLine": "Questa è la tua mappa {di_attivita}.",
+      "ownYLine": "E questa è la tua mappa dell'attività «{y}».",
+      "thinking": "Fred cerca la mappa concordata…",
+      "concLine": "Questa è la mappa concordata dal tuo ufficio, compilata dal o dalla responsabile.",
+      "concNone": "La mappa concordata dal tuo ufficio non è ancora stata compilata: quando il o la responsabile l'avrà scritta, la troverai qui."
+    },
+
     alfly: {
       "type": "esplorazione",
       "dayLabel": "Una domanda al giorno",
@@ -315,10 +368,12 @@ window.FRED_FLOW = {
         "Ciao! Sono Al Fly, il pilota di Al Volo."
       ],
       "intro": "Questa mappa unisce le mappe {di_attivita} di {n} colleghi, tu compreso. Il colore dice in quante mappe compare ogni passaggio: verde in quasi tutte, arancio in alcune, rosso in poche.",
+      "waitConcordata": "La mappa concordata dal tuo ufficio non c'è ancora. Torna quando il o la responsabile l'avrà compilata!",
+      "introConcordata": "Questa è la mappa {di_attivita} concordata dal tuo ufficio. Partiamo da qui per guardarla più da vicino.",
       "introOthers": "Questa mappa unisce le mappe {di_attivita} confermate da {n} colleghi. Il colore dice in quante mappe compare ogni passaggio: verde in quasi tutte, arancio in alcune, rosso in poche.",
       "introExample": "Questa è una mappa di esempio: quando i colleghi avranno confermato le loro mappe con Fred, qui vedrai la mappa che le unisce.",
       "introAlone": "Questa è la mappa {di_attivita}. Per ora è l'unica confermata: quando arriveranno quelle dei colleghi, qui le vedrai unite.",
-      "thinkingAggregate": "Al Fly sta unendo le mappe dei colleghi…",
+      "thinkingAggregate": "Al Fly sta preparando la mappa concordata…",
       "askEdit": "Vuoi modificare qualcosa in questa mappa?",
       // quota di mappe in cui deve comparire un passaggio per essere verde (alta) o arancio (media); sotto è rosso
       "soglie": { "alta": 0.75, "media": 0.4 },
@@ -752,6 +807,7 @@ window.FRED_FLOW = {
     { mode: "venerdi",    day: "Ven · sett. 1", title: "Verifica dello schema" },
     { mode: "mercoledi2", day: "Mer · sett. 2", title: "Approfondimento" },
     { mode: "venerdi2",   day: "Ven · sett. 2", title: "Approvazione" },
+    { mode: "concordata", day: "Ultima tappa",  title: "Mappa concordata" },
     { mode: "alfly",      day: "Al Fly",        title: "Punti critici" },
     { mode: "libero",     day: "Con AI",        title: "Descrivi un processo" }   // non usata nel pilota
   ],

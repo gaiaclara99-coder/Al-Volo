@@ -1,6 +1,6 @@
 /* =====================================================================
    SCHEMA DEL PROCESSO – disegna in SVG un processo nel formato JSON
-   di Fred (lanes / nodes / edges).
+   di Fred (lanes / nodes / edges), come una mappa della metro.
    - render(proc, opts): disegna. Formati "compact" (pop-up) e "full".
    - autoLayout(proc): calcola righe e percorsi delle frecce per i
      processi generati dal modello (quelli scritti a mano in flow.js
@@ -145,199 +145,327 @@ window.FredDiagram = (function () {
   }
 
   /* ------------------------------------------------------------------
-     DISEGNO
+     DISEGNO A "MAPPA DELLA METRO"
+     - ogni ruolo (colonna "lanes") è una linea orizzontale con il suo colore;
+     - ogni passaggio è una fermata (cerchio) sulla linea di chi lo fa;
+     - da sinistra a destra, nell'ordine in cui si svolge il lavoro (row);
+     - dove il lavoro passa a un altro ruolo, la linea scende o sale in
+       diagonale fino alla fermata successiva: quella è una fermata di
+       "cambio ruolo" (cerchio più grande, bordo scuro);
+     - tutte le fermate sono cerchi (i bivi hanno un "?"); i ritorni indietro sono frecce tratteggiate.
      ------------------------------------------------------------------ */
+  const METRO = {
+    // orizzontale (computer): step = distanza tra fermate, gap = distanza tra linee
+    compact: { stepW: 92, gap: 74, r: 7, rx: 10, line: 5, font: 9.5, lineH: 11, pad: 14 },
+    full:    { stepW: 150, gap: 104, r: 10, rx: 14, line: 7, font: 13, lineH: 16, pad: 22 },
+    // verticale (cellulare): le linee scendono dall'alto, i nomi stanno a destra delle fermate
+    vcompact: { stepW: 52, gap: 44, r: 7, rx: 10, line: 5, font: 10, lineH: 12, pad: 14, labelW: 128 },
+    vfull:    { stepW: 66, gap: 58, r: 9, rx: 12, line: 6, font: 12.5, lineH: 15, pad: 18, labelW: 170 }
+  };
+  // colori delle linee: distinti tra loro e dal blu della selezione
+  const PALETTE = ["#1E9E78", "#7B6FE0", "#E0582E", "#C2389B", "#2C8FB8", "#B58A00", "#6B8E23", "#8C564B", "#D6455D", "#4F6D7A"];
+  const CTX = "#9AA1AE";      // attività prima e dopo
+  // per ora tutte le fermate sono cerchi identici (stessa misura e stesso bordo, del colore del ruolo):
+  // false = si tornano a distinguere cambio di ruolo, bivi, da verificare, varianti, ecc.
+  const UNIFORME = true;
+  const FONT = "Archivo, 'Helvetica Neue', sans-serif";
+
+  function isContextLane(proc, i) {
+    const name = proc.lanes[i];
+    return proc.nodes.some((n) => n.lane === i && n.status === "context") ||
+      name === "Attività precedenti" || name === "Attività successive";
+  }
+  function laneColors(proc) {
+    const cols = []; let k = 0;
+    proc.lanes.forEach((_, i) => { cols[i] = isContextLane(proc, i) ? CTX : PALETTE[k++ % PALETTE.length]; });
+    return cols;
+  }
+  function interchanges(proc) {
+    const byId = {}; proc.nodes.forEach((n) => { byId[n.id] = n; });
+    const set = new Set();
+    proc.edges.forEach((e) => {
+      const a = byId[e.from], b = byId[e.to];
+      if (!a || !b || a.lane === b.lane) return;
+      if (a.status === "context" || b.status === "context") return;
+      set.add(a.id); set.add(b.id);
+    });
+    return set;
+  }
+  function halo(t, w) { t.setAttribute("stroke", "#FFFFFF"); t.setAttribute("stroke-width", w || 3); t.setAttribute("stroke-linejoin", "round"); t.setAttribute("paint-order", "stroke"); }
+  // sul cellulare la mappa scorre in verticale, sul computer in orizzontale
+  function wantsVertical(opts) {
+    if (opts.orientation) return opts.orientation === "vertical";
+    return typeof window !== "undefined" && window.innerWidth < 700;
+  }
+
   function render(proc, opts) {
     opts = opts || {};
-    const S = SIZES[opts.size || "full"];
+    const size = opts.size || "full";
+    const V = wantsVertical(opts);
+    const M = METRO[(V ? "v" : "") + size];
     const id = "fd" + (++uid);
-    const rows = Math.max.apply(null, proc.nodes.map((n) => n.row || 0)) + 1;
-    const W = proc.lanes.length * S.laneW;
-    const H = S.headH + rows * S.rowH + 8;
-    const decH = S.nodeH + 14;
+    const cols = laneColors(proc);
+    const inter = interchanges(proc);
+    const byId = {};
+    proc.nodes.forEach((n) => { byId[n.id] = n; });
+    const rows = Math.max.apply(null, proc.nodes.map((n) => n.row || 0).concat([0])) + 1;
+    const nL = proc.lanes.length;
+    const maxC = Math.max(8, Math.floor(((V ? M.labelW : M.stepW) - 8) / (M.font * 0.52)));
+    const labelLines = (n) => { let l = wrap(n.label, maxC); if (l.length > 3) { l = l.slice(0, 3); l[2] += "…"; } return l; };
+    const labelH = 3 * M.lineH + 6;
+    const badgeH = M.font * 1.4 + 4;
+    const hasBack = proc.edges.some((e) => byId[e.from] && byId[e.to] && e.from !== e.to && (byId[e.to].row || 0) <= (byId[e.from].row || 0));
+
+    // p = avanzamento del lavoro, q = linea (ruolo)
+    let p0, q0, W, H;
+    if (V) {
+      q0 = M.pad + (hasBack ? 14 : 8) + M.rx;            // a sinistra: spazio per le curve e i ritorni
+      p0 = M.pad + badgeH + M.rx;
+      W = q0 + (nL - 1) * M.gap + M.rx + 6 + M.labelW + M.pad;
+      H = p0 + (rows - 1) * M.stepW + Math.max(M.rx, 2 * M.lineH) + M.pad;
+    } else {
+      p0 = M.pad + M.stepW / 2;
+      q0 = M.pad + labelH + badgeH;
+      W = M.pad * 2 + rows * M.stepW;
+      H = q0 + (nL - 1) * M.gap + M.rx + labelH + M.pad + (hasBack ? 18 : 0);
+    }
+    const P = (row) => p0 + row * M.stepW;
+    const Q = (lane) => q0 + lane * M.gap;
+    const xy = (p, q) => (V ? [q, p] : [p, q]);
+    const pt = (p, q) => xy(p, q).join(" ");
 
     const svg = s("svg", {
       viewBox: "0 0 " + W + " " + H, width: W, height: H,
-      role: "group", "aria-label": "Schema del processo: " + proc.title,
-      class: "fd-svg fd-" + (opts.size || "full")
+      role: "group", "aria-label": "Mappa della metro del processo: " + proc.title,
+      class: "fd-svg fd-metro fd-" + size + (V ? " fd-vertical" : "")
     });
-
     const defs = s("defs", {}, svg);
-    const m = s("marker", {
-      id: id + "-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5,
-      markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse"
-    }, defs);
-    s("path", { d: "M0 0 L10 5 L0 10 z", fill: C.ink }, m);
+    const mk = s("marker", { id: id + "-arrow", viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" }, defs);
+    s("path", { d: "M0 0 L10 5 L0 10 z", fill: C.ink2 }, mk);
+    s("rect", { x: 0, y: 0, width: W, height: H, fill: "#FFFFFF" }, svg);
+
+    proc.nodes.forEach((n) => {
+      n._p = P(n.row || 0); n._q = Q(n.lane);
+      const c = xy(n._p, n._q); n._cx = c[0]; n._cy = c[1];
+      n._r = UNIFORME ? M.r : n.type === "decision" ? M.rx : inter.has(n.id) ? M.rx : M.r;
+    });
 
     const hl = opts.highlightLane;
-    proc.lanes.forEach((name, i) => {
-      s("rect", { x: i * S.laneW, y: 0, width: S.laneW, height: H, fill: i === hl ? C.laneHi : (i % 2 ? C.paper : C.band) }, svg);
-      if (i > 0) s("line", { x1: i * S.laneW, y1: 0, x2: i * S.laneW, y2: H, stroke: C.line, "stroke-width": 1 }, svg);
-      const maxC = Math.floor((S.laneW - 8) / (S.headFont * 0.56));
-      multiline(svg, wrap(name, maxC).slice(0, 2), i * S.laneW + S.laneW / 2, S.headH / 2,
-        Object.assign({}, S, { font: S.headFont, lineH: S.headFont + 2 }), C.ink2, 700);
-    });
-    s("line", { x1: 0, y1: S.headH, x2: W, y2: S.headH, stroke: C.line, "stroke-width": 1 }, svg);
+    const dimLane = (lane) => hl != null && opts.dimOthers && lane !== hl;
+    if (hl != null && proc.lanes[hl] != null) {
+      const band = M.gap * 0.84;
+      if (V) s("rect", { x: Q(hl) - band / 2, y: 0, width: band, height: H, fill: C.laneHi, opacity: 0.7 }, svg);
+      else s("rect", { x: 0, y: Q(hl) - band / 2, width: W, height: band, fill: C.laneHi, opacity: 0.7 }, svg);
+    }
 
-    const byId = {};
-    proc.nodes.forEach((n) => {
-      byId[n.id] = n;
-      n._cx = n.lane * S.laneW + S.laneW / 2;
-      n._cy = S.headH + (n.row || 0) * S.rowH + S.rowH / 2;
-      n._hh = n.type === "decision" ? decH / 2 : S.nodeH / 2;
-    });
-
-    const edgeLayer = s("g", { class: "fd-edges" }, svg);
+    // --- linee (sotto le fermate)
+    const lines = s("g", { class: "fd-lines", "stroke-linecap": "round", "stroke-linejoin": "round", fill: "none" }, svg);
+    const between = (lane, p1, p2, a, b) => proc.nodes.some((m) => m !== a && m !== b && m.lane === lane &&
+      m._p > Math.min(p1, p2) + 1 && m._p < Math.max(p1, p2) - 1);
+    const labels = [];
     proc.edges.forEach((e) => {
       const a = byId[e.from], b = byId[e.to];
       if (!a || !b || a === b) return;
-      let d, lx, ly, anchor = "start";
-      const isBack = (b.row || 0) <= (a.row || 0);
-
-      if (isBack) {
-        // ciclo: esce a destra, risale lungo il bordo, rientra da destra
-        const x1 = a._cx + S.nodeW / 2, y1 = a._cy;
-        const sideX = (Math.max(a.lane, b.lane) + 1) * S.laneW - 4;
-        d = "M" + x1 + " " + y1 + " H" + sideX + " V" + b._cy + " H" + (b._cx + S.nodeW / 2);
-        lx = x1 + 3; ly = y1 - 5;
-      } else if (e.exit === "right" || e.exit === "left") {
-        const dir = e.exit === "right" ? 1 : -1;
-        const x1 = a._cx + dir * (S.nodeW / 2), y1 = a._cy;
-        if (e.route === "side") {
-          const sideX = e.exit === "left" ? a.lane * S.laneW + 4 : (a.lane + 1) * S.laneW - 4;
-          const tx = b._cx - (S.nodeW / 2) * (e.exit === "left" ? 1 : -1);
-          d = "M" + x1 + " " + y1 + " H" + sideX + " V" + b._cy + " H" + tx;
+      const ctx = a.status === "context" || b.status === "context";
+      const color = ctx ? CTX : cols[a.lane];
+      const attrs = { stroke: color, "stroke-width": ctx ? M.line * 0.6 : M.line };
+      if (ctx) attrs["stroke-dasharray"] = (M.line * 1.2) + " " + (M.line * 1.1);
+      if (dimLane(a.lane) && dimLane(b.lane)) attrs.opacity = 0.3;
+      let d, lp, lq;
+      if (b._p <= a._p) {
+        // si torna a un passaggio precedente: freccia tratteggiata fuori dalle linee
+        const qb = V ? M.pad / 2 + 4 : Q(nL - 1) + M.rx + labelH + 8;
+        const off = V ? -(a._r + 2) : a._r;
+        d = "M" + pt(a._p, a._q + (V ? -a._r : a._r)) + " L" + pt(a._p, qb) + " L" + pt(b._p, qb) + " L" + pt(b._p, b._q + (V ? -(b._r + 2) : b._r + 2));
+        s("path", { d: d, stroke: C.ink2, "stroke-width": 1.4, "stroke-dasharray": "5 4", "marker-end": "url(#" + id + "-arrow)" }, lines);
+        lp = (a._p + b._p) / 2; lq = qb + (V ? 10 : -4); void off;
+      } else if (a.lane === b.lane) {
+        if (between(a.lane, a._p, b._p, a, b)) {
+          // salta le fermate in mezzo: la linea passa di lato, lontano dai nomi
+          const side = V ? -1 : (a.lane === 0 ? 1 : -1);
+          const qc = a._q + side * M.gap * 0.42;
+          const k = Math.min(M.stepW * 0.45, Math.abs(qc - a._q));
+          d = "M" + pt(a._p, a._q) + " Q" + pt(a._p + k, a._q) + " " + pt(a._p + k, (a._q + qc) / 2) +
+              " T" + pt(a._p + 2 * k, qc) + " L" + pt(b._p - 2 * k, qc) +
+              " Q" + pt(b._p - k, qc) + " " + pt(b._p - k, (b._q + qc) / 2) + " T" + pt(b._p, b._q);
+          lp = (a._p + b._p) / 2; lq = qc + (V ? -6 : -4);
         } else {
-          d = "M" + x1 + " " + y1 + " H" + b._cx + " V" + (b._cy - b._hh);
+          d = "M" + pt(a._p, a._q) + " L" + pt(b._p, b._q);
+          lp = a._p + a._r + (V ? 10 : 6); lq = a._q + (V ? -M.line - 4 : -M.line);
         }
-        lx = x1 + dir * 4; ly = y1 - 5; anchor = dir > 0 ? "start" : "end";
+        s("path", Object.assign({ d: d }, attrs), lines);
       } else {
-        const x1 = a._cx, y1 = a._cy + a._hh, x2 = b._cx, y2 = b._cy - b._hh;
-        if (Math.abs(x1 - x2) < 1) d = "M" + x1 + " " + y1 + " V" + y2;
-        else {
-          const mid = e.bendLate ? y2 - 10 : y1 + Math.min(12, (y2 - y1) / 2);
-          d = "M" + x1 + " " + y1 + " V" + mid + " H" + x2 + " V" + y2;
+        const dq = Math.abs(b._q - a._q);
+        const lateP = b._p - dq, earlyP = a._p + dq;
+        if (lateP >= a._p && !between(a.lane, a._p, lateP + 1, a, b)) {
+          d = "M" + pt(a._p, a._q) + " L" + pt(lateP, a._q) + " L" + pt(b._p, b._q);          // dritto, poi in diagonale
+          lp = lateP + (b._p - lateP) * 0.35; lq = a._q + (b._q - a._q) * 0.35;
+        } else if (earlyP <= b._p && !between(b.lane, earlyP - 1, b._p, a, b)) {
+          d = "M" + pt(a._p, a._q) + " L" + pt(earlyP, b._q) + " L" + pt(b._p, b._q);         // in diagonale, poi dritto
+          lp = a._p + (earlyP - a._p) * 0.5; lq = a._q + (b._q - a._q) * 0.5;
+        } else {
+          d = "M" + pt(a._p, a._q) + " L" + pt(b._p, b._q);
+          lp = (a._p + b._p) / 2; lq = (a._q + b._q) / 2;
         }
-        lx = x1 + 5; ly = y1 + S.font + 2;
+        s("path", Object.assign({ d: d }, attrs), lines);
       }
-      s("path", { d: d, fill: "none", stroke: C.ink, "stroke-width": 1.3, "marker-end": "url(#" + id + "-arrow)" }, edgeLayer);
-      if (e.label) {
-        const t = s("text", {
-          x: lx, y: ly, "text-anchor": anchor, fill: C.brass, "font-size": S.font, "font-weight": 700,
-          "font-family": "Archivo, 'Helvetica Neue', sans-serif"
-        }, edgeLayer);
-        t.textContent = e.label;
-      }
+      if (e.label) { const c = xy(lp, lq); labels.push({ x: c[0], y: c[1], text: e.label }); }
     });
 
+    // --- fermate
     proc.nodes.forEach((n) => {
       const g = s("g", { class: "fd-node", "data-id": n.id }, svg);
-      const isTerminal = n.type === "start" || n.type === "end";
-      let fill = "#FFFFFF", stroke = C.ink, sw = 1.4, dash = null, text = C.ink;
-      if (isTerminal) { fill = C.ink; text = "#FFFFFF"; }
-      if (n.status === "variant") { fill = C.variantFill; stroke = C.brassLine; sw = 2.4; }
-      if (n.status === "verify") { stroke = C.verify; dash = "4 3"; if (isTerminal) { fill = "#FFFFFF"; text = C.ink; } }
-      if (n.status === "context") { stroke = "#8E97A8"; fill = "#F1F2F5"; dash = "2 3"; text = C.ink; }   // attività prima e dopo
-      if (n.isNew) { stroke = C.fresh; sw = 2.6; dash = null; if (!isTerminal) fill = C.freshFill; }
-      if (n.level) {                 // mappa aggregata: verde, arancio, rosso
+      const isInter = !UNIFORME && inter.has(n.id);
+      const color = n.status === "context" ? CTX : cols[n.lane];
+      let fill = "#FFFFFF", stroke = color, sw = isInter ? 3.6 : 2.8, dash = null, weight = isInter ? 700 : 500, txt = C.ink;
+      if (!UNIFORME) {
+      if (n.status === "verify") { dash = "3 2.5"; }
+      if (n.status === "context") { fill = "#F1F2F5"; stroke = CTX; dash = "2.5 2"; txt = C.ink2; }
+      if (n.status === "variant") { fill = C.variantFill; }
+      if (n.isNew) { stroke = C.fresh; fill = C.freshFill; sw = 3.4; dash = null; }
+      if (n.level) {
         const L = { alta: [C.hi, C.hiFill], media: [C.mid, C.midFill], bassa: [C.lo, C.loFill] }[n.level];
-        if (L) { stroke = L[0]; fill = L[1]; text = C.ink; sw = 2.6; dash = null; }
+        if (L) { fill = L[0]; stroke = L[0]; dash = null; }
       }
-      if (hl != null && opts.dimOthers && n.lane !== hl) g.setAttribute("opacity", "0.5");
-      if (opts.selectedId === n.id || (opts.selectedIds && opts.selectedIds.indexOf(n.id) >= 0)) {
-        stroke = C.select; sw = 3; dash = null;
       }
+      const selected = opts.selectedId === n.id || (opts.selectedIds && opts.selectedIds.indexOf(n.id) >= 0);
+      if (selected) { stroke = C.select; fill = "#DCE9F7"; sw = 4; dash = null; txt = C.select; weight = 700; }
+      if (dimLane(n.lane)) g.setAttribute("opacity", "0.35");
 
-      const x = n._cx - S.nodeW / 2, y = n._cy - S.nodeH / 2;
-      let shape;
-      if (n.type === "decision") {
-        const hw = S.nodeW / 2, hh = decH / 2;
-        shape = s("polygon", { points: [n._cx, n._cy - hh, n._cx + hw, n._cy, n._cx, n._cy + hh, n._cx - hw, n._cy].join(" ") }, g);
+      const ln = labelLines(n);
+      const above = !V && n.lane === 0;
+      // area toccabile: fermata + nome
+      let hit;
+      if (V) {
+        const lx = Q(nL - 1) + M.rx + 6;
+        const tw = Math.min(M.labelW, Math.max.apply(null, ln.map((x) => x.length)) * M.font * 0.56 + 6);
+        hit = { x: n._cx - n._r - 6, y: n._cy - Math.max(n._r, M.lineH) - 4, width: (lx - n._cx) + n._r + 6 + tw, height: Math.max(2 * n._r, ln.length * M.lineH) + 10 };
       } else {
-        shape = s("rect", { x: x, y: y, width: S.nodeW, height: S.nodeH, rx: isTerminal ? S.nodeH / 2 : 6 }, g);
+        const hTop = above ? n._cy - n._r - 4 - ln.length * M.lineH - 4 : n._cy - n._r - 6;
+        const hBot = above ? n._cy + n._r + 6 : n._cy + n._r + 4 + ln.length * M.lineH + 4;
+        hit = { x: n._cx - M.stepW / 2 + 3, y: hTop, width: M.stepW - 6, height: hBot - hTop };
       }
-      shape.setAttribute("fill", fill);
-      shape.setAttribute("stroke", stroke);
-      shape.setAttribute("stroke-width", sw);
+      s("rect", Object.assign({ fill: "#000", "fill-opacity": 0 }, hit), g);
+
+      let shape;
+      {
+        // tutte le fermate sono rotonde; cambio di ruolo: fermata più grande, con un anello scuro attorno (come gli interscambi della metro)
+        if (isInter && !selected) s("circle", { cx: n._cx, cy: n._cy, r: n._r + sw / 2 + 1.6, fill: "#FFFFFF", stroke: C.ink, "stroke-width": 1.6 }, g);
+        shape = s("circle", { cx: n._cx, cy: n._cy, r: n._r }, g);
+      }
+      shape.setAttribute("class", "fd-st");
+      shape.setAttribute("fill", fill); shape.setAttribute("stroke", stroke); shape.setAttribute("stroke-width", sw);
       if (dash) shape.setAttribute("stroke-dasharray", dash);
-
-      const usableW = n.type === "decision" ? S.nodeW * 0.62 : S.nodeW - (isTerminal ? 12 : 8);
-      const maxC = Math.max(6, Math.floor(usableW / (S.font * 0.52)));
-      let lines = wrap(n.label, maxC);
-      const maxLines = Math.floor((n.type === "decision" ? decH * 0.7 : S.nodeH - 4) / S.lineH);
-      if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += "…"; }
-      multiline(g, lines, n._cx, n._cy, S, text, isTerminal ? 600 : 500);
-
-      if (n.status === "variant") {
-        const bx = n._cx + S.nodeW / 2 - 2, by = n._cy - S.nodeH / 2 + 2, r = S.font * 0.75;
-        s("circle", { cx: bx, cy: by, r: r, fill: C.brass, stroke: "#FFFFFF", "stroke-width": 1.5 }, g);
-        const t = s("text", {
-          x: bx, y: by + r * 0.42, "text-anchor": "middle", fill: "#FFFFFF", "font-size": r * 1.25, "font-weight": 700,
-          "font-family": "Archivo, sans-serif"
-        }, g);
-        t.textContent = "!";
+      if (n.type === "decision" && !UNIFORME) {
+        const q = s("text", { x: n._cx, y: n._cy + M.font * 0.36, "text-anchor": "middle", "font-size": M.font, "font-weight": 700, fill: selected ? C.select : C.ink, "font-family": FONT }, g);
+        q.textContent = "?";
       }
 
-      if (n.isNew) {
-        // etichetta "Nuovo": il dipendente vede subito cosa è cambiato grazie a lui
-        const bw = S.font * 3.4, bh = S.font * 1.35;
-        const bx = n._cx - bw / 2, by = n._cy - n._hh - bh / 2;
-        s("rect", { x: bx, y: by, width: bw, height: bh, rx: bh / 2, fill: C.fresh }, g);
-        const t = s("text", {
-          x: n._cx, y: by + bh * 0.72, "text-anchor": "middle", fill: "#FFFFFF", "font-size": S.font * 0.8, "font-weight": 700,
-          "font-family": "Archivo, sans-serif"
-        }, g);
-        t.textContent = "DA TE";
+      // nome del passaggio: in verticale a destra di tutte le linee; in orizzontale sopra (prima linea) o sotto
+      let t;
+      if (V) {
+        const lx = Q(nL - 1) + M.rx + 6;
+        if (lx - n._cx > n._r + 4) {   // un filo leggero collega la fermata al suo nome
+          s("line", { x1: n._cx + n._r + 2, y1: n._cy, x2: lx - 3, y2: n._cy, stroke: "#C9CED8", "stroke-width": 1, "stroke-dasharray": "1.5 2.5" }, g);
+        }
+        t = s("text", { x: lx, "text-anchor": "start", fill: txt, "font-size": M.font, "font-weight": weight, "font-family": FONT }, g);
+        const y0 = n._cy + M.font * 0.35 - (ln.length - 1) * M.lineH / 2;
+        ln.forEach((x, i) => { const ts = s("tspan", { x: lx, y: y0 + i * M.lineH }, t); ts.textContent = x; });
+      } else {
+        t = s("text", { x: n._cx, "text-anchor": "middle", fill: txt, "font-size": M.font, "font-weight": weight, "font-family": FONT }, g);
+        const y0 = above ? n._cy - n._r - 6 - (ln.length - 1) * M.lineH : n._cy + n._r + 4 + M.font;
+        ln.forEach((x, i) => { const ts = s("tspan", { x: n._cx, y: y0 + i * M.lineH }, t); ts.textContent = x; });
       }
+      halo(t, 3);
 
-      if (n.count) {
-        const bw = S.font * 3.1, bh = S.font * 1.35;
-        const bx = n._cx + S.nodeW / 2 - bw + 4, by = n._cy - n._hh - bh + 3;   // sopra il bordo, senza coprire il testo
-        const col = { alta: C.hi, media: C.mid, bassa: C.lo }[n.level] || C.ink;
+      // etichette DA TE / n su N: dalla parte opposta al nome
+      const pill = (text, col) => {
+        const bw = Math.max(M.font * 2.6, text.length * M.font * 0.62 + M.font), bh = M.font * 1.35;
+        let bx, by;
+        if (V) { bx = n._cx - bw / 2; by = n._cy - n._r - 2 - bh; }
+        else { bx = n._cx - bw / 2; by = above ? n._cy + n._r + 3 : n._cy - n._r - 3 - bh; }
         s("rect", { x: bx, y: by, width: bw, height: bh, rx: bh / 2, fill: col }, g);
-        const bt = s("text", { x: bx + bw / 2, y: by + bh * 0.72, "text-anchor": "middle", fill: "#FFFFFF",
-          "font-size": S.font * 0.8, "font-weight": 700, "font-family": "Archivo, sans-serif" }, g);
-        bt.textContent = n.count;
+        const bt = s("text", { x: bx + bw / 2, y: by + bh * 0.72, "text-anchor": "middle", fill: "#FFFFFF", "font-size": M.font * 0.8, "font-weight": 700, "font-family": FONT }, g);
+        bt.textContent = text;
+      };
+      if (n.isNew) pill("DA TE", C.fresh);
+      else if (n.count) pill(String(n.count), { alta: C.hi, media: C.mid, bassa: C.lo }[n.level] || C.ink);
+      if (n.status === "variant" && !UNIFORME) {
+        const bx = n._cx + n._r * 0.85, by = n._cy - n._r * 0.85, r = M.font * 0.62;
+        s("circle", { cx: bx, cy: by, r: r, fill: C.brass, stroke: "#FFFFFF", "stroke-width": 1.2 }, g);
+        const vt = s("text", { x: bx, y: by + r * 0.45, "text-anchor": "middle", fill: "#FFFFFF", "font-size": r * 1.3, "font-weight": 700, "font-family": FONT }, g);
+        vt.textContent = "!";
       }
+
+      const role = proc.lanes[n.lane] || "";
       const statusText = n.level ? ({ alta: "in quasi tutte le mappe", media: "in alcune mappe", bassa: "in poche mappe" }[n.level] + (n.count ? ": " + n.count : ""))
         : ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare",
-           context: n.context === "before" ? "attività precedente" : "attività successiva" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
+             context: n.context === "before" ? "attività precedente" : "attività successiva" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
       const title = s("title", {}, g);
-      title.textContent = n.label + (statusText ? " (" + statusText + ")" : "");
+      title.textContent = n.label + (role ? " – " + role : "") + (statusText ? " (" + statusText + ")" : "");
       if (opts.onSelect && (!opts.selectableIds || opts.selectableIds.indexOf(n.id) >= 0)) {
         g.setAttribute("tabindex", "0");
         g.setAttribute("role", "button");
-        g.setAttribute("aria-label", n.label + ", " + statusText);
+        g.setAttribute("aria-label", n.label + ", " + (role ? role + ", " : "") + statusText);
         g.classList.add("fd-selectable");
         const pick = () => opts.onSelect(n);
         g.addEventListener("click", pick);
-        g.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); }
-        });
+        g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
       }
     });
 
+    // scritte dei bivi (Sì / No), sopra a tutto
+    labels.forEach((L) => {
+      const t = s("text", { x: L.x, y: L.y, "text-anchor": "middle", fill: C.brass, "font-size": M.font, "font-weight": 700, "font-family": FONT }, svg);
+      halo(t, 3.5);
+      t.textContent = L.text;
+    });
     return svg;
   }
 
+  /* LEGENDA: le linee (ruoli) e il significato delle fermate presenti nella mappa */
   function legend(proc) {
     const el = document.createElement("div");
-    el.className = "fd-legend";
-    const hasNew = proc && proc.nodes && proc.nodes.some((n) => n.isNew);
-    if (proc && proc.nodes && proc.nodes.some((n) => n.level)) {
-      el.innerHTML = (hasNew ? '<span><i class="lg lg-new"></i>Cambiato da te</span>' : "") +
-        '<span><i class="lg lg-hi"></i>In quasi tutte le mappe</span>' +
-        '<span><i class="lg lg-mid"></i>In alcune mappe</span>' +
-        '<span><i class="lg lg-lo"></i>In poche mappe</span>';
-      return el;
+    el.className = "fd-legend fd-legend-metro";
+    if (!proc || !proc.nodes) return el;
+    const cols = laneColors(proc);
+    const inter = interchanges(proc);
+    const ic = (inner, w) => '<svg width="' + (w || 18) + '" height="18" viewBox="0 0 ' + (w || 18) + ' 18" aria-hidden="true">' + inner + "</svg>";
+    const st = (fill, stroke, extra, r) => ic('<circle cx="9" cy="9" r="' + (r || 5.5) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2.4"' + (extra || "") + "/>");
+    const item = (icon, text) => "<span>" + icon + text + "</span>";
+    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const byId = {}; proc.nodes.forEach((n) => { byId[n.id] = n; });
+
+    const roles = [];
+    proc.lanes.forEach((name, i) => {
+      if (!proc.nodes.some((n) => n.lane === i)) return;
+      const ctx = cols[i] === CTX;
+      roles.push(item(ic('<line x1="2" y1="9" x2="26" y2="9" stroke="' + cols[i] + '" stroke-width="' + (ctx ? 3 : 5) + '" stroke-linecap="round"' + (ctx ? ' stroke-dasharray="4 3"' : "") + "/>", 28), esc(name)));
+    });
+    const stops = [];
+    stops.push(item(st("#FFFFFF", "#7C8496"), "Attività"));
+    if (UNIFORME) {
+      if (proc.nodes.some((n) => n.isNew)) stops.push(item(ic('<rect x="1" y="4" width="26" height="10" rx="5" fill="' + C.fresh + '"/><text x="14" y="11.6" text-anchor="middle" font-size="6.5" font-weight="700" fill="#fff" font-family="sans-serif">DA TE</text>', 28), "Cambiato da te"));
+    } else {
+    if (inter.size) stops.push(item(ic('<circle cx="9" cy="9" r="7.6" fill="#fff" stroke="' + C.ink + '" stroke-width="1.4"/><circle cx="9" cy="9" r="5" fill="#fff" stroke="#7C8496" stroke-width="2.6"/>'), "Cambio di ruolo"));
+    if (proc.nodes.some((n) => n.type === "decision")) stops.push(item(ic('<circle cx="9" cy="9" r="6.5" fill="#fff" stroke="#7C8496" stroke-width="2.2"/><text x="9" y="12" text-anchor="middle" font-size="8.5" font-weight="700" fill="' + C.ink + '" font-family="sans-serif">?</text>'), "Domanda (bivio)"));
+    if (proc.nodes.some((n) => n.level)) {
+      stops.push(item(st(C.hi, C.hi), "In quasi tutte le mappe"));
+      stops.push(item(st(C.mid, C.mid), "In alcune mappe"));
+      stops.push(item(st(C.lo, C.lo), "In poche mappe"));
     }
-    const hasCtx = proc && proc.nodes && proc.nodes.some((n) => n.status === "context");
+    if (proc.nodes.some((n) => n.status === "verify" && !n.level)) stops.push(item(st("#FFFFFF", "#7C8496", ' stroke-dasharray="3 2.5"'), "Da verificare"));
+    if (proc.nodes.some((n) => n.status === "variant")) stops.push(item(ic('<circle cx="8" cy="10" r="5.5" fill="' + C.variantFill + '" stroke="#7C8496" stroke-width="2.4"/><circle cx="13" cy="5" r="4" fill="' + C.brass + '"/><text x="13" y="7.6" text-anchor="middle" font-size="6.5" font-weight="700" fill="#fff" font-family="sans-serif">!</text>'), "Variante da approfondire"));
+    if (proc.nodes.some((n) => n.isNew)) stops.push(item(st(C.freshFill, C.fresh), "Cambiato da te"));
+    if (proc.nodes.some((n) => n.status === "context")) stops.push(item(st("#F1F2F5", CTX, ' stroke-dasharray="2.5 2"'), "Attività prima e dopo"));
+    }
+    if (proc.edges.some((e) => byId[e.from] && byId[e.to] && e.from !== e.to && (byId[e.to].row || 0) <= (byId[e.from].row || 0)))
+      stops.push(item(ic('<path d="M2 9 H20" stroke="' + C.ink2 + '" stroke-width="1.6" stroke-dasharray="4 3"/><path d="M18 5 L24 9 L18 13 z" fill="' + C.ink2 + '"/>', 26), "Si torna indietro"));
+
     el.innerHTML =
-      (hasNew ? '<span><i class="lg lg-new"></i>Cambiato da te</span>' : "") +
-      (hasCtx ? '<span><i class="lg lg-ctx"></i>Attività prima e dopo</span>' : "") +
-      '<span><i class="lg lg-ok"></i>Confermato</span>' +
-      '<span><i class="lg lg-var"></i>Variante</span>' +
-      '<span><i class="lg lg-ver"></i>Da verificare</span>';
+      '<p class="lg-how">' + (wantsVertical({}) ? "Ogni linea colorata è un ruolo, ogni cerchio un'attività: il lavoro va dall'alto in basso. Quando la linea si sposta in diagonale, il lavoro passa a un altro ruolo." : "Ogni linea colorata è un ruolo, ogni cerchio un'attività: il lavoro va da sinistra a destra. Quando la linea scende o sale, il lavoro passa a un altro ruolo.") + "</p>" +
+      '<div class="lg-group"><strong>Linee (chi lo fa)</strong>' + roles.join("") + "</div>" +
+      '<div class="lg-group"><strong>Fermate</strong>' + stops.join("") + "</div>";
     return el;
   }
 

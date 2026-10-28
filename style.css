@@ -205,14 +205,13 @@ body { padding-top: var(--tour-h); }
 .quote strong { display: block; font-size: 12px; color: #2E5B3E; margin-bottom: 2px; }
 .note-new { border: 2px solid #2E7D4F; background: #ECF7F0; }
 .fd-selectable { cursor: pointer; }
-.fd-selectable:hover .fd-st { stroke: var(--focus); stroke-width: 4; }
-.fd-selectable:focus-visible .fd-st { stroke: var(--focus); stroke-width: 5; }
-.fd-legend-metro { flex-direction: column; gap: 8px; }
-.fd-legend-metro .lg-how { margin: 0; font-size: 12px; line-height: 1.4; color: var(--ink2); }
-.fd-legend-metro .lg-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
-.fd-legend-metro .lg-group strong { flex-basis: 100%; font-size: 12px; color: var(--navy); }
+.fd-legend-metro, .fd-legend-roles { flex-direction: column; gap: 8px; }
+.fd-legend-roles .lg-how, .fd-legend-metro .lg-how { margin: 0; font-size: 12px; line-height: 1.4; color: var(--ink2); }
+.fd-legend-roles .lg-group, .fd-legend-metro .lg-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.fd-legend-roles .lg-group strong, .fd-legend-metro .lg-group strong { flex-basis: 100%; font-size: 12px; color: var(--navy); }
 .fd-legend-metro svg { flex-shrink: 0; }
-.fd-selectable:hover polygon.fd-st { stroke: var(--focus); stroke-width: 2.5; }
+.fd-selectable:hover rect, .fd-selectable:hover polygon { stroke: var(--focus); stroke-width: 2.5; }
+.fd-selectable:focus-visible rect, .fd-selectable:focus-visible polygon { stroke: var(--focus); stroke-width: 3.5; }
 .fd-selectable:focus { outline: none; }
 
 
@@ -371,3 +370,4 @@ button.crew-card:disabled .crew-avatar { filter: grayscale(.35); }
   body.pilot .home:not([hidden]), body.pilot .welcome:not([hidden]) { max-width: 480px; margin: 0 auto; background: var(--paper); }
   body.pilot .popup { left: calc(50% - 240px); right: auto; width: 480px; }
 }
+.home-reset { align-self: center; font-size: 12px; color: var(--ink2); min-height: 36px; text-align: center; }

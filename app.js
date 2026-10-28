@@ -1817,6 +1817,49 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const editBtn = document.getElementById("homeEditMap"); if (editBtn) editBtn.hidden = !state.memory.proc;
   }
 
+  /* Pulizia dei progressi di prova delle versioni vecchie: sul telefono possono essere rimaste
+     mappe di esempio (la "richiesta di materiale al magazzino") o tappe fatte senza una mappa propria.
+     In quel caso Fred riparte dalla tappa 1; le risposte già arrivate nel foglio non si toccano. */
+  function isExampleMap(p) {
+    if (!p || !Array.isArray(p.nodes)) return false;
+    const sig = (q) => q.nodes.map((n) => String(n.label || "").trim().toLowerCase()).sort().join("|");
+    const examples = [FLOW.process, FLOW.process2, PILOT.mappa].filter((q) => q && Array.isArray(q.nodes));
+    const s = sig(p);
+    // uguale all'esempio, oppure ne contiene ancora la maggior parte dei passaggi
+    return examples.some((q) => {
+      if (sig(q) === s) return true;
+      const ex = new Set(q.nodes.map((n) => String(n.label || "").trim().toLowerCase()));
+      const hit = p.nodes.filter((n) => ex.has(String(n.label || "").trim().toLowerCase())).length;
+      return p.nodes.length > 0 && hit / p.nodes.length >= 0.5;
+    });
+  }
+  function cleanOldExampleMaps() {
+    if (PILOT.mappaDaRacconto === false) return;
+    const m = state.memory || {};
+    const stale = (state.doneSteps.mercoledi && !m.proc) || isExampleMap(m.proc) || isExampleMap(m.approvedProc);
+    if (stale) {
+      ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "concordata"].forEach((k) => { delete state.doneSteps[k]; });
+      ["proc", "procY", "approvedProc", "approvedProcY", "focus", "lastChange", "tappa4Giorno"].forEach((k) => { delete m[k]; });
+    }
+    ["alflyProc", "allyProc", "procC"].forEach((k) => { if (isExampleMap(m[k])) delete m[k]; });
+    state.memory = m;
+    saveProgress();
+  }
+  // "Ricomincia da zero": cancella i progressi su questo telefono e dà un nuovo codice di test
+  (function () {
+    const code = document.getElementById("homeCode");
+    if (!code || !code.parentNode) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "link-btn home-reset"; b.textContent = "Ricomincia da zero su questo telefono";
+    let armed = false;
+    b.addEventListener("click", () => {
+      if (!armed) { armed = true; b.textContent = "Sicuro? Tocca di nuovo: le tue mappe su questo telefono si cancellano (quelle già nel foglio restano)"; return; }
+      try { localStorage.removeItem(STORE); } catch (e) { /* niente */ }
+      location.reload();
+    });
+    code.parentNode.insertBefore(b, code.nextSibling);
+  })();
+
   // controlla (al massimo una volta al minuto) se nel foglio c'è già la mappa concordata
   let concCheckedAt = 0;
   function checkConcordata() {
@@ -2265,6 +2308,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   const saved = load(STORE, {});
   if (saved.doneSteps) state.doneSteps = saved.doneSteps;
   if (saved.memory) state.memory = saved.memory;
+  cleanOldExampleMaps();
   reset(nextFredStep() || "venerdi2");
   setupWelcome();
   applyPhoneLayout();

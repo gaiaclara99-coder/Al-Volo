@@ -483,7 +483,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       const chosen = [];
       const resolve = (nodes) => { card._freeze(nodes.map((n) => n.id)); done(nodes); };
       let doneBtn = null;
-      const only = q.onlyContext ? proc.nodes.filter((n) => n.status === "context").map((n) => n.id) : undefined;
+      const only = q.selectableIds || (q.onlyContext ? proc.nodes.filter((n) => n.status === "context").map((n) => n.id) : undefined);
       const card = diagramCard({ proc: proc, selectedIds: [], selectableIds: only, onSelect: (node) => {
         if (!multiple) { resolve([node]); return; }
         const i = chosen.findIndex((n) => n.id === node.id);
@@ -494,7 +494,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       } });
       const buttons = [];
       if (multiple) buttons.push({ label: q.doneLabel || "Fatto", primary: true, onClick: () => resolve(chosen.slice()) });
-      buttons.push({ label: q.noneLabel, onClick: () => resolve([]) });
+      if (q.noneLabel) buttons.push({ label: q.noneLabel, onClick: () => resolve([]) });
       actions(buttons);
       if (multiple) { doneBtn = ui.composer.querySelector(".btn-primary"); doneBtn.disabled = true; }
     });
@@ -1216,7 +1216,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const remoteC = await fetchConcordata();
     wait0.remove(); guard(run);
     if (remoteC) state.concordataOk = true;
-    const c = remoteC || state.memory.procC;
+    const c = state.memory.procC || remoteC;     // chi l'ha scritta su questo telefono vede subito la sua versione
     if (!c) return null;
     const p = FredDiagram.autoLayout(clone(c));
     p.nodes.forEach((n) => { delete n.isNew; delete n.level; delete n.count; });
@@ -1356,6 +1356,253 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     await fredSay(all ? ses.thanksYes : ses.thanksFix, run);
     finish();
   }
+  /* ---------------- piccoli aiuti per le domande di Al Fly e Ally Fly ---------------- */
+  async function askChoice(run, text, options, extra) {
+    if (text) await fredSay(text, run);
+    const ans = await askText(Object.assign({ options: options }, extra || {}));
+    guard(run); clearComposer();
+    if (ans.kind === "skip") { addMsg("user", "Domanda saltata", "msg-skip"); return null; }
+    addMsg("user", ans.text);
+    return ans.text;
+  }
+  async function askOpen(run, text, extra) { return askChoice(run, text, null, extra); }
+  async function pickOnMap(run, text, proc, ids, multiple, noneLabel) {
+    if (text) await fredSay(text, run);
+    const nodes = await pickSteps({ selectableIds: ids, doneLabel: "Fatto", noneLabel: noneLabel || null }, proc, multiple);
+    guard(run); clearComposer();
+    addMsg("user", nodes.length ? nodes.map((n) => "“" + n.label + "”").join(", ") : (noneLabel || "Nessuna"));
+    return nodes;
+  }
+  const labelsOf = (proc, ids) => ids.map((id) => (proc.nodes.find((n) => n.id === id) || {}).label).filter(Boolean);
+
+  /* ---------------- Al Fly: 6 domande sulla mappa concordata; le risposte cambiano la grafica ---------------- */
+  // n.freq = alta|media|bassa (forma), n.durata = poco|abbastanza|molto (misura), n.attenzione (warning),
+  // n.rischio = procedurale|economico|reputazionale (sfumatura di rosso), n.attesa (clessidra), n.inefficienza (fulmine)
+  const RISK_ORDER = ["procedurale", "economico", "reputazionale"];
+  async function runAlAnalisi(run, ses) {
+    const groups = ses.tappe;
+    const i = alflyIndex();
+    let proc;
+    if (i === 0 || !state.memory.alflyProc || !state.memory.alflyProc.concordata) {
+      scene();
+      for (const line of ses.greeting) await fredSay(line, run);
+      proc = await concordataMap(run, ses.thinkingAggregate);
+      if (!proc) {
+        await fredSay(ses.waitConcordata, run);
+        state.done = true; ui.badge.hidden = true; ui.teaser.hidden = true;
+        actions([{ label: "Torna all'equipaggio", primary: true, onClick: goHome }]);
+        return;
+      }
+      proc.alAnalisi = true;           // all'inizio tutti i riquadri hanno la stessa forma e misura
+      state.memory.alflyProc = proc; delete state.memory.alMie; state.memory.alflyTappa = 0;
+      saveProgress();
+      await fredSay(fill(ses.introConcordata, {}), run);
+      diagramCard({ proc: proc });
+      saveAnswer("mappa_concordata_usata", JSON.stringify({ nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane] })) }));
+      await fredSay(ses.askEdit, run);
+      const edit = await new Promise((resolve) => actions([{ label: "Sì", primary: true, onClick: () => resolve(true) },
+                                                           { label: "No", onClick: () => resolve(false) }]));
+      guard(run); clearComposer(); addMsg("user", edit ? "Sì" : "No");
+      if (edit) {
+        const res = await editMap(run, proc, { memKey: "alflyProc" });
+        if (res.changed) {
+          proc = res.proc; proc.alAnalisi = true; proc.concordata = true; state.memory.alflyProc = proc; saveProgress();
+          saveAnswer("mappa_concordata_modificata", JSON.stringify({ nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane] })) }));
+        }
+      }
+      await new Promise((resolve) => actions([{ label: "Va bene, iniziamo", primary: true, onClick: resolve },
+                                              { label: "Più tardi", onClick: minimize }]));
+      guard(run); clearComposer();
+    } else {
+      proc = FredDiagram.autoLayout(clone(state.memory.alflyProc)); proc.alAnalisi = true;
+      const ga = ses.greetingAgain || [];
+      if (ga.length) await fredSay(ga[(i - 1) % ga.length], run);
+    }
+    // le attività della persona: le domande riguardano solo quelle
+    if (!state.memory.alMie || !state.memory.alMie.length) {
+      const mine = await pickOnMap(run, ses.mie, proc, undefined, true, null);
+      state.memory.alMie = (mine.length ? mine : proc.nodes).map((n) => n.id);
+      saveAnswer("al_mie_attivita", mine.map((n) => n.label).join("\n"));
+      saveProgress();
+    }
+    const mie = state.memory.alMie.filter((id) => proc.nodes.some((n) => n.id === id));
+    const node = (id) => proc.nodes.find((n) => n.id === id);
+    const Q = ses.q, step = groups[i][0];
+    const save = (id, value, label) => saveAnswer(id, value, label || "");
+    const sinoSelect = async (q, key) => {
+      const a = await askChoice(run, q.text, ["Sì", "No"]); save(key, a || "");
+      if (a !== "Sì") return [];
+      const sel = await pickOnMap(run, q.select, proc, mie, true, null);
+      save(key + "-attivita", sel.map((n) => n.label).join("\n"), sel.map((n) => n.label).join(", "));
+      return sel;
+    };
+
+    if (step === "frequenza") {
+      await fredSay(Q.frequenza.text, run);
+      for (const id of mie) {
+        const n = node(id);
+        const a = await askChoice(run, fill(Q.frequenza.each, { passaggio: n.label }), Q.frequenza.options);
+        let val = a;
+        if (a === "Altro") val = "Altro: " + ((await askOpen(run, fill(Q.frequenza.altro, { passaggio: n.label }))) || "");
+        n.freq = (ses.frequenzaLivello || {})[a] || null;            // "Altro" o risposta scritta: forma normale
+        save("frequenza", val, n.label);
+      }
+    } else if (step === "tempo") {
+      await fredSay(Q.tempo.text, run);
+      const molto = [];
+      for (const id of mie) {
+        const n = node(id);
+        const a = await askChoice(run, fill(Q.tempo.each, { passaggio: n.label }), Q.tempo.options);
+        const v = String(a || "").toLowerCase();
+        n.durata = ["poco", "abbastanza", "molto"].indexOf(v) >= 0 ? v : null;
+        save("tempo", a || "", n.label);
+        if (n.durata === "molto") molto.push(n);
+      }
+      for (const n of molto) save("tempo-motivo", (await askOpen(run, fill(Q.tempo.motiva, { passaggio: n.label }))) || "", n.label);
+    } else if (step === "attenzione") {
+      const sel = await sinoSelect(Q.attenzione, "attenzione");
+      sel.forEach((s) => { node(s.id).attenzione = true; });
+      if (sel.length) save("attenzione-motivo", (await askOpen(run, Q.attenzione.motiva)) || "", sel.map((n) => n.label).join(", "));
+    } else if (step === "rischi") {
+      const sel = await sinoSelect(Q.rischi, "rischi");
+      for (const s of sel) {
+        await fredSay(fill(Q.rischi.tipo, { passaggio: s.label }), run);
+        const m = await askMulti({ options: Q.rischi.tipi, placeholder: "Altro (facoltativo)…", doneLabel: "Fatto" });
+        guard(run); clearComposer();
+        const txt = m.options.concat(m.other ? [m.other] : []).join(", ");
+        addMsg("user", txt || "—");
+        const lv = m.options.map((o) => o.toLowerCase()).filter((o) => RISK_ORDER.indexOf(o) >= 0)
+          .sort((a, b) => RISK_ORDER.indexOf(b) - RISK_ORDER.indexOf(a))[0];
+        node(s.id).rischio = lv || "procedurale";                      // più tipi insieme: vale il più forte
+        save("rischi-tipo", txt, s.label);
+      }
+    } else if (step === "attese") {
+      const sel = await sinoSelect(Q.attese, "attese");
+      sel.forEach((s) => { node(s.id).attesa = true; });
+      if (sel.length) save("attese-specifica", (await askOpen(run, Q.attese.specifica)) || "", sel.map((n) => n.label).join(", "));
+    } else if (step === "inefficienze") {
+      const sel = await sinoSelect(Q.inefficienze, "inefficienze");
+      sel.forEach((s) => { node(s.id).inefficienza = true; });
+      if (sel.length) save("inefficienze-motivo", (await askOpen(run, Q.inefficienze.motiva)) || "", sel.map((n) => n.label).join(", "));
+    }
+    state.memory.alflyProc = proc;
+    state.memory.alflyTappa = i + 1;
+    state.memory.alflyGiorno = todayKey();
+    saveProgress();
+    const last = i + 1 >= groups.length;
+    if (last) {
+      saveAnswer("mappa_al_fly", JSON.stringify({ nodes: proc.nodes.map((n) => ({ label: n.label, ruolo: proc.lanes[n.lane],
+        frequenza: n.freq || "", tempo: n.durata || "", attenzione: !!n.attenzione, rischio: n.rischio || "", attese: !!n.attesa, inefficienze: !!n.inefficienza })) }));
+      await fredSay(ses.closingLast, run);
+      diagramCard({ proc: proc });
+      finish(); return;
+    }
+    await fredSay(ses.mapUpdated, run);
+    diagramCard({ proc: proc });
+    const gate = ses.unaAlGiorno && !PROVA;
+    await fredSay(gate ? ses.closingDay : ses.closing, run);
+    state.done = true; ui.badge.hidden = true; ui.teaser.hidden = true;
+    const btns = [{ label: "Torna all'equipaggio", primary: true, onClick: goHome }];
+    if (!gate) btns.push({ label: "Un'altra domanda adesso", onClick: () => startFromHome("alfly") });
+    actions(btns);
+  }
+
+  /* ---------------- Ally Fly: tre blocchi sulle attività critiche emerse con Al Fly ---------------- */
+  function allyCount() { const s = FLOW.sessions.ally; return (s && s.blocchi) ? s.blocchi.length : 1; }
+  function allyIndex() { return Math.min(state.memory.allyBlocco || 0, allyCount() - 1); }
+  function allyWaits() {
+    const s = FLOW.sessions.ally;
+    return !!(s && s.unBloccoAlGiorno) && !PROVA && (state.memory.allyBlocco || 0) > 0 && state.memory.allyGiorno === todayKey();
+  }
+  function criticalIds(proc) {
+    const mie = state.memory.alMie || proc.nodes.map((n) => n.id);
+    return proc.nodes.filter((n) => mie.indexOf(n.id) >= 0 &&
+      (n.durata === "molto" || n.attenzione || n.rischio || n.attesa || n.inefficienza)).map((n) => n.id);
+  }
+  async function runAllyBlocchi(run, ses) {
+    const i = allyIndex();
+    const b = ses.blocchi[i];
+    const base = state.memory.alflyProc;
+    if (!base) { await fredSay("Ally Fly parte dalla mappa di Al Fly: prima completa le domande di Al Fly.", run); finish(); return; }
+    const proc = FredDiagram.autoLayout(clone(base)); proc.alAnalisi = true;
+    state.memory.allyProc = proc;
+    if (!state.memory.allyCritiche) state.memory.allyCritiche = criticalIds(proc);
+    const crit = () => state.memory.allyCritiche.filter((id) => proc.nodes.some((n) => n.id === id));
+    state.allyStep = labelsOf(proc, crit()).join(", ");
+    if (i === 0) for (const line of ses.greeting) await fredSay(line, run);
+    else await fredSay(ses.greetingAgain[(i - 1) % ses.greetingAgain.length], run);
+    await fredSay(crit().length ? fill(ses.elenco, { elenco: labelsOf(proc, crit()).map((l) => "«" + l + "»").join(", ") }) : ses.nessuna, run);
+    diagramCard({ proc: proc, selectedIds: crit() });
+    const save = (id, v) => saveAnswer(id, v == null ? "" : v, labelsOf(proc, crit()).join(", "));
+    for (const q of b.domande) {
+      if (q.type === "conferma") {
+        if (!crit().length) continue;
+        const a = await askChoice(run, q.text, q.options); save(q.id, a);
+        if (a === "No") save(q.id + "-correzione", await askOpen(run, q.seNo));
+      } else if (q.type === "sinoMappa") {
+        const a = await askChoice(run, q.text, q.options); save(q.id, a);
+        if (a === "Sì") {
+          const sel = await pickOnMap(run, q.select, proc, undefined, true, null);
+          save(q.id + "-attivita", sel.map((n) => n.label).join("\n"));
+          if (q.aggiunge) sel.forEach((n) => { if (state.memory.allyCritiche.indexOf(n.id) < 0) state.memory.allyCritiche.push(n.id); });
+          if (q.poi) save(q.id + "-perche", await askOpen(run, q.poi));
+        }
+      } else if (q.type === "sinoTesto") {
+        const a = await askChoice(run, q.text, q.options); save(q.id, a);
+        if (a === "Sì" && q.seSi) save(q.id + "-dettaglio", await askOpen(run, q.seSi));
+        if (a === "No" && q.seNo) save(q.id + "-dettaglio", await askOpen(run, q.seNo));
+      } else if (q.type === "perCriticita") {
+        if (!crit().length) continue;
+        await fredSay(q.text, run);
+        const out = [];
+        for (const id of crit()) {
+          const l = labelsOf(proc, [id])[0];
+          const a = await askChoice(run, "«" + l + "»", q.options);
+          out.push({ attivita: l, risposta: a });
+        }
+        save(q.id, JSON.stringify(out));
+      } else if (q.type === "lista" || q.type === "errori") {
+        await fredSay(q.text, run);
+        const items = await askSteps({ hint: q.hint, placeholder: "1…", doneLabel: "Fatto", min: 1 });
+        guard(run); clearComposer();
+        addMsg("user", items.map((s, k) => (k + 1) + ". " + s).join("\n"), "msg-list");
+        if (q.type === "lista") { save(q.id, items.join("\n")); continue; }
+        // errori: per ognuno la gravità, poi Ally li riordina dal più grave
+        const rated = [];
+        for (const e of items) rated.push({ errore: e, gravita: await askChoice(run, fill(q.gravita, { errore: e }), q.livelli) });
+        const rank = (g) => { const k = q.livelli.indexOf(g); return k < 0 ? -1 : k; };
+        rated.sort((x, y) => rank(y.gravita) - rank(x.gravita));
+        await fredSay(q.ordinati + "\n" + rated.map((r, k) => (k + 1) + ". " + r.errore + " (" + (r.gravita || "—") + ")").join("\n"), run);
+        if (rated.length) await fredSay(fill(q.piuGrave, { errore: rated[0].errore }), run);
+        save(q.id, JSON.stringify(rated));
+      } else if (q.type === "multi") {
+        await fredSay(q.text, run);
+        const m = await askMulti({ options: q.options, placeholder: q.placeholder, doneLabel: "Fatto" });
+        guard(run); clearComposer();
+        const txt = m.options.concat(m.other ? ["Altro: " + m.other] : []).join(", ");
+        addMsg("user", txt); save(q.id, txt);
+      } else if (q.type === "stima") {
+        const a = await askChoice(run, q.text, q.options, { placeholder: q.placeholder }); save(q.id, a);
+        if (q.poi) save(q.id + "-eccezioni", await askOpen(run, q.poi));
+      } else if (q.type === "choice") {
+        save(q.id, await askChoice(run, q.text, q.options));
+      } else {
+        save(q.id, await askOpen(run, q.text, { placeholder: q.placeholder }));
+      }
+    }
+    state.memory.allyBlocco = i + 1;
+    state.memory.allyGiorno = todayKey();
+    state.allyStep = null;
+    saveProgress();
+    if (i + 1 >= ses.blocchi.length) { state.doneSteps.ally = true; await fredSay(ses.closingLast, run); finish(); return; }
+    const gate = ses.unBloccoAlGiorno && !PROVA;
+    await fredSay(gate ? ses.closingDay : "Grazie! Blocco finito.", run);
+    state.done = true; ui.badge.hidden = true; ui.teaser.hidden = true;
+    const btns = [{ label: "Torna all'equipaggio", primary: true, onClick: goHome }];
+    if (!gate) btns.push({ label: "Prossimo blocco adesso", onClick: () => startFromHome("ally") });
+    actions(btns);
+  }
+
   /* ---------------- Fred finito: la propria mappa, poi quella concordata ---------------- */
   async function runVediMappe(run, ses) {
     for (const line of ses.greeting) await fredSay(line, run);
@@ -1765,7 +2012,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   const isPhone = () => true;          // il pilota mostra sempre la versione per cellulare
   const homeEl = document.getElementById("home");
   // percorso sul cellulare: le tappe di Fred, poi Al Fly
-  const PHONE_PATH = ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "concordata", "alfly"];
+  const PHONE_PATH = ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "concordata", "alfly", "ally"];
 
   const FRED_STEPS = ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "concordata"];
   // la tappa 5 (mappa concordata) si apre dal giorno dopo la tappa 4
@@ -1776,7 +2023,14 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   }
   function alflyCount() { const s = FLOW.sessions.alfly; return (s && s.tappe) ? s.tappe.length : 1; }
   // una domanda di Al Fly al giorno; con ?prova nell'indirizzo il limite non vale (per provare tutto subito)
-  const PROVA = /[?&]prova\b/.test(location.search);
+  // modalità prova: ?prova nell'indirizzo (o prova: true in config.js) → tutte le tappe si aprono subito, una dopo l'altra
+  const PROVA = /[?&]prova\b/.test(location.search) || PILOT.prova === true;
+  function fredWaits() {
+    const s = FLOW.sessions.mercoledi;
+    const next = nextFredStep();
+    return !!(s && s.unaTappaAlGiorno) && !PROVA && !!next && FRED_STEPS.some((m) => state.doneSteps[m]) &&
+      state.memory.fredGiorno === todayKey();
+  }
   function todayKey() { const d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
   function alflyWaits() {
     const s = FLOW.sessions.alfly;
@@ -1790,12 +2044,12 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const next = nextFredStep();
     const doneCount = FRED_STEPS.filter((m) => state.doneSteps[m]).length;
     const nF = FRED_STEPS.length;
-    const fWait = next === "concordata" && concWaits();
+    const fWait = (next === "concordata" && concWaits()) || fredWaits();
     fredCard.querySelector(".crew-meta").textContent = !next ? "Completato ✓ · tocca per vedere le mappe"
-      : fWait ? "Ultima tappa da domani (tappa " + nF + " di " + nF + ")"
+      : fWait ? "Prossima tappa domani (tappa " + (doneCount + 1) + " di " + nF + ")"
       : doneCount ? "Riprendi: tappa " + (doneCount + 1) + " di " + nF : nF + " tappe";
     fredCard.disabled = !!next && fWait;
-    const alOpen = !!(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito);
+    const alOpen = !!(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito) || PROVA;
     const alReady = (alOpen || !!state.memory.approvedProc) && !state.doneSteps.alfly;
     const alWait = alReady && alflyWaits();
     const noConc = alReady && !alflyIndex() && state.concordataOk === false && !state.memory.procC;
@@ -1810,8 +2064,14 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     checkConcordata();
     const allyCard = homeEl.querySelector('[data-start="ally"]');
     if (allyCard) {
-      const nA = Number(state.doneSteps.ally) || 0;
-      allyCard.querySelector(".crew-meta").textContent = nA ? "Passaggi guardati: " + nA + " · tocca per un altro" : "Un passaggio alla volta";
+      const aReady = !!state.doneSteps.alfly && state.doneSteps.ally !== true;
+      const aWait = aReady && allyWaits();
+      allyCard.disabled = !aReady || aWait;
+      const aN = allyCount(), aI = allyIndex();
+      allyCard.querySelector(".crew-meta").textContent = state.doneSteps.ally === true ? "Completato ✓"
+        : !state.doneSteps.alfly ? "Si apre dopo Al Fly"
+        : aWait ? "Prossimo blocco domani (blocco " + (aI + 1) + " di " + aN + ")"
+        : aI ? "Riprendi: blocco " + (aI + 1) + " di " + aN : aN + " blocchi, uno al giorno";
     }
     document.getElementById("homeCode").textContent = profile ? "Il tuo codice di test: " + profile.codice : "";
     const editBtn = document.getElementById("homeEditMap"); if (editBtn) editBtn.hidden = !state.memory.proc;
@@ -1844,6 +2104,14 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     ["alflyProc", "allyProc", "procC"].forEach((k) => { if (isExampleMap(m[k])) delete m[k]; });
     state.memory = m;
     saveProgress();
+  }
+  // modalità prova: un avviso in cima alla pagina dell'equipaggio
+  if (PROVA) {
+    const note = document.createElement("p");
+    note.className = "home-prova";
+    note.textContent = "Modalità prova: tutte le tappe si aprono subito, una dopo l'altra.";
+    const head = homeEl.querySelector(".home-head");
+    if (head && head.parentNode) head.parentNode.insertBefore(note, head.nextSibling);
   }
   // "Ricomincia da zero": cancella i progressi su questo telefono e dà un nuovo codice di test
   (function () {
@@ -2158,9 +2426,12 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       saveProgress();
       const i = PHONE_PATH.indexOf(state.mode);
       if (state.mode === "venerdi2") { state.memory.tappa4Giorno = todayKey(); saveProgress(); }
+      if (FRED_STEPS.indexOf(state.mode) >= 0) { state.memory.fredGiorno = todayKey(); saveProgress(); }
       let next = i >= 0 && i < PHONE_PATH.length - 1 ? PHONE_PATH[i + 1] : null;
       if (next === "concordata" && concWaits()) next = "alfly";            // l'ultima tappa di Fred arriva domani
-      if (next === "alfly" && !state.memory.approvedProc && !(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito)) next = null;     // Al Fly parte solo da una mappa confermata
+      if (next === "alfly" && !state.memory.approvedProc && !(FLOW.sessions.alfly && FLOW.sessions.alfly.apertoSubito) && !PROVA) next = null;
+      if (FRED_STEPS.indexOf(next) >= 0 && fredWaits()) next = null;      // la prossima tappa di Fred arriva domani
+      if (next === "ally" && !state.doneSteps.alfly) next = null;     // Al Fly parte solo da una mappa confermata
       const step = next && FLOW.tour.find((t) => t.mode === next);
       const buttons = [];
       if (step) buttons.push({ label: "Prossima tappa: " + step.title, primary: true, onClick: () => startFromHome(next) });
@@ -2185,6 +2456,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       const ses = FLOW.sessions[state.mode];
       const flow = ses.type === "verifica" ? (r) => runVerifica(r, ses)
         : ses.type === "esplorazione" ? (r) => runEsplorazione(r, ses)
+        : ses.type === "analisi" ? (r) => runAlAnalisi(r, ses)
+        : ses.type === "allyBlocchi" ? (r) => runAllyBlocchi(r, ses)
         : ses.type === "libero" ? runLibero
         : ses.type === "modifica" ? (r) => runModifica(r, ses)
         : ses.type === "ally" ? (r) => runAlly(r, ses)
@@ -2233,6 +2506,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     state.answers = {};
     const ses = FLOW.sessions[mode];
     if (ses.tappe) ses.dayLabel = "Tappa " + (alflyIndex() + 1) + " di " + ses.tappe.length;
+    if (ses.blocchi) ses.dayLabel = "Blocco " + (allyIndex() + 1) + " di " + ses.blocchi.length;
     applyCharacter(ses);
     ui.log.innerHTML = "";
     clearComposer();

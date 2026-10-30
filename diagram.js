@@ -167,9 +167,26 @@ window.FredDiagram = (function () {
   /* ------------------------------------------------------------------
      DISEGNO
      ------------------------------------------------------------------ */
+  /* MAPPA DI AL FLY: all'inizio tutti i riquadri uguali; poi le risposte cambiano la grafica.
+     frequenza → forma (alta quadrato, media rombo, bassa cerchio); tempo → misura (poco piccolo, molto grande);
+     rischio → sfumatura di rosso (procedurale chiaro, economico medio, reputazionale pieno);
+     attenzione → triangolo di avviso; attese → clessidra; inefficienze → fulmine. */
+  const RISK = { procedurale: "#F9D7D3", economico: "#EE9389", reputazionale: "#C62828" };
+  const SIZE_K = { poco: 0.8, abbastanza: 1, molto: 1.25 };
+  function alDims(n, S) {
+    const k = SIZE_K[n.durata] || 1;
+    const base = S.nodeH;                        // lato di riferimento
+    if (n.freq === "alta") { const a = Math.min(S.laneW - 8, base * 1.12 * k); return { kind: "square", w: a, h: a }; }
+    if (n.freq === "media") { const a = Math.min(S.laneW - 4, base * 1.5 * k); return { kind: "diamond", w: a, h: a }; }
+    if (n.freq === "bassa") { const a = Math.min(S.laneW - 8, base * 1.2 * k); return { kind: "circle", w: a, h: a }; }
+    return { kind: "rect", w: Math.min(S.laneW - 6, S.nodeW * k), h: S.nodeH * k };
+  }
+
   function render(proc, opts) {
     opts = opts || {};
-    const S = SIZES[opts.size || "full"];
+    let S = SIZES[opts.size || "full"];
+    const AL = !!proc.alAnalisi;
+    if (AL) S = Object.assign({}, S, { rowH: S.rowH * 1.45 });     // spazio per i riquadri grandi
     const id = "fd" + (++uid);
     const rows = Math.max.apply(null, proc.nodes.map((n) => n.row || 0)) + 1;
     const W = proc.lanes.length * S.laneW;
@@ -207,6 +224,7 @@ window.FredDiagram = (function () {
       n._cx = n.lane * S.laneW + S.laneW / 2;
       n._cy = S.headH + (n.row || 0) * S.rowH + S.rowH / 2;
       n._hh = n.type === "decision" ? decH / 2 : S.nodeH / 2;
+      if (AL) { n._dim = alDims(n, S); n._hh = n._dim.h / 2; }
     });
 
     const edgeLayer = s("g", { class: "fd-edges" }, svg);
@@ -254,7 +272,7 @@ window.FredDiagram = (function () {
 
     proc.nodes.forEach((n) => {
       const g = s("g", { class: "fd-node", "data-id": n.id }, svg);
-      const isTerminal = n.type === "start" || n.type === "end";
+      const isTerminal = !AL && (n.type === "start" || n.type === "end");   // nella mappa di Al Fly anche inizio e fine sono riquadri normali
       const rc = cols[n.lane] || C.ink;
       let fill = "#FFFFFF", stroke = rc, sw = 2.2, dash = null, text = C.ink;
       if (isTerminal) { fill = rc; stroke = rc; text = "#FFFFFF"; }
@@ -271,9 +289,15 @@ window.FredDiagram = (function () {
         stroke = C.select; sw = 3; dash = null;
       }
 
+      if (AL && n.rischio && RISK[n.rischio]) { fill = RISK[n.rischio]; text = n.rischio === "reputazionale" ? "#FFFFFF" : C.ink; }
       const x = n._cx - S.nodeW / 2, y = n._cy - S.nodeH / 2;
       let shape;
-      if (n.type === "decision") {
+      const D = n._dim;
+      if (AL) {
+        if (D.kind === "diamond") shape = s("polygon", { points: [n._cx, n._cy - D.h / 2, n._cx + D.w / 2, n._cy, n._cx, n._cy + D.h / 2, n._cx - D.w / 2, n._cy].join(" ") }, g);
+        else if (D.kind === "circle") shape = s("circle", { cx: n._cx, cy: n._cy, r: D.w / 2 }, g);
+        else shape = s("rect", { x: n._cx - D.w / 2, y: n._cy - D.h / 2, width: D.w, height: D.h, rx: D.kind === "square" ? 1 : 6 }, g);
+      } else if (n.type === "decision") {
         const hw = S.nodeW / 2, hh = decH / 2;
         shape = s("polygon", { points: [n._cx, n._cy - hh, n._cx + hw, n._cy, n._cx, n._cy + hh, n._cx - hw, n._cy].join(" ") }, g);
       } else {
@@ -284,12 +308,38 @@ window.FredDiagram = (function () {
       shape.setAttribute("stroke-width", sw);
       if (dash) shape.setAttribute("stroke-dasharray", dash);
 
-      const usableW = n.type === "decision" ? S.nodeW * 0.62 : S.nodeW - (isTerminal ? 12 : 8);
-      const maxC = Math.max(6, Math.floor(usableW / (S.font * 0.52)));
+      let usableW = n.type === "decision" ? S.nodeW * 0.62 : S.nodeW - (isTerminal ? 12 : 8);
+      let usableH = n.type === "decision" ? decH * 0.7 : S.nodeH - 4;
+      if (AL) {
+        const f = { diamond: [0.56, 0.56], circle: [0.74, 0.74] }[D.kind] || [1, 1];
+        usableW = D.w * f[0] - 6; usableH = D.h * f[1] - 4;
+      }
+      const maxC = Math.max(5, Math.floor(usableW / (S.font * 0.52)));
       let lines = wrap(n.label, maxC);
-      const maxLines = Math.floor((n.type === "decision" ? decH * 0.7 : S.nodeH - 4) / S.lineH);
+      const maxLines = Math.max(1, Math.floor(usableH / S.lineH));
       if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += "…"; }
       multiline(g, lines, n._cx, n._cy, S, text, isTerminal ? 600 : 500);
+      if (AL) {
+        const r = S.font * 0.95, top = n._cy - n._hh, bot = n._cy + n._hh, left = n._cx - D.w / 2, right = n._cx + D.w / 2;
+        if (n.attenzione) {          // triangolo di avviso, in alto a sinistra
+          const cx = left + 2, cy = top + 2;
+          s("polygon", { points: [cx, cy - r * 1.05, cx + r, cy + r * 0.75, cx - r, cy + r * 0.75].join(" "), fill: "#E8A317", stroke: "#FFFFFF", "stroke-width": 1.2 }, g);
+          const tt = s("text", { x: cx, y: cy + r * 0.55, "text-anchor": "middle", fill: C.ink, "font-size": r * 1.1, "font-weight": 800, "font-family": "Archivo, sans-serif" }, g);
+          tt.textContent = "!";
+        }
+        if (n.attesa) {              // clessidra, in basso a sinistra
+          const cx = left + 2, cy = bot - 2;
+          s("circle", { cx: cx, cy: cy, r: r, fill: "#FFFFFF", stroke: "#4A6FA5", "stroke-width": 1.4 }, g);
+          const h = r * 0.55;
+          s("path", { d: "M" + (cx - h) + " " + (cy - h) + " H" + (cx + h) + " L" + (cx - h) + " " + (cy + h) + " H" + (cx + h) + " Z", fill: "#4A6FA5" }, g);
+        }
+        if (n.inefficienza) {        // fulmine, in basso a destra
+          const cx = right - 2, cy = bot - 2;
+          s("circle", { cx: cx, cy: cy, r: r, fill: "#6B4FA0", stroke: "#FFFFFF", "stroke-width": 1.2 }, g);
+          const u = r * 0.6;
+          s("path", { d: "M" + (cx + u * 0.2) + " " + (cy - u) + " L" + (cx - u * 0.6) + " " + (cy + u * 0.15) + " H" + (cx - u * 0.05) + " L" + (cx - u * 0.25) + " " + (cy + u) + " L" + (cx + u * 0.6) + " " + (cy - u * 0.15) + " H" + (cx + u * 0.05) + " Z", fill: "#FFFFFF" }, g);
+        }
+      }
 
       if (n.status === "variant") {
         const bx = n._cx + S.nodeW / 2 - 2, by = n._cy - S.nodeH / 2 + 2, r = S.font * 0.75;
@@ -322,9 +372,13 @@ window.FredDiagram = (function () {
           "font-size": S.font * 0.8, "font-weight": 700, "font-family": "Archivo, sans-serif" }, g);
         bt.textContent = n.count;
       }
-      const statusText = n.level ? ({ alta: "in quasi tutte le mappe", media: "in alcune mappe", bassa: "in poche mappe" }[n.level] + (n.count ? ": " + n.count : ""))
+      const alText = !AL ? "" : [
+        n.freq ? "frequenza " + n.freq : "", n.durata ? "durata " + ({ poco: "breve", abbastanza: "moderata", molto: "lunga" }[n.durata]) : "", n.rischio ? "rischio " + n.rischio : "",
+        n.attenzione ? "richiede più attenzione" : "", n.attesa ? "attese" : "", n.inefficienza ? "inefficienze" : ""].filter(Boolean).join(", ");
+      const statusText0 = n.level ? ({ alta: "in quasi tutte le mappe", media: "in alcune mappe", bassa: "in poche mappe" }[n.level] + (n.count ? ": " + n.count : ""))
         : ({ confirmed: "confermato", variant: "variante da approfondire", verify: "da verificare",
            context: n.context === "before" ? "attività precedente" : "attività successiva" }[n.status] || "") + (n.isNew ? ", cambiato da te" : "");
+      const statusText = [statusText0, alText].filter(Boolean).join(", ");
       const title = s("title", {}, g);
       title.textContent = n.label + (statusText ? " (" + statusText + ")" : "");
       if (opts.onSelect && (!opts.selectableIds || opts.selectableIds.indexOf(n.id) >= 0)) {
@@ -365,10 +419,35 @@ window.FredDiagram = (function () {
         (has((n) => n.status === "variant") ? '<span><i class="lg" style="border:1.5px solid #7C8496;background:#FFF5E2"></i>Variante (con il segno !)</span>' : "") +
         (has((n) => n.status === "verify") ? '<span><i class="lg lg-ver"></i>Da verificare</span>' : "");
     }
+    let al = "";
+    if (proc.alAnalisi) {
+      const ic = (inner, w) => '<svg width="' + (w || 20) + '" height="20" viewBox="0 0 ' + (w || 20) + ' 20" aria-hidden="true">' + inner + "</svg>";
+      const it = (svg, txt) => "<span>" + svg + txt + "</span>";
+      const st = 'fill="#fff" stroke="#7C8496" stroke-width="1.8"';
+      const has = (f) => proc.nodes.some(f);
+      const grp = (title, items) => items.length ? '<div class="lg-group"><strong>' + title + "</strong>" + items.join("") + "</div>" : "";
+      const fq = [];
+      if (has((n) => n.freq === "alta")) fq.push(it(ic('<rect x="3" y="3" width="14" height="14" ' + st + "/>"), "Alta"));
+      if (has((n) => n.freq === "media")) fq.push(it(ic('<polygon points="10,1.5 18.5,10 10,18.5 1.5,10" ' + st + "/>"), "Media"));
+      if (has((n) => n.freq === "bassa")) fq.push(it(ic('<circle cx="10" cy="10" r="7.5" ' + st + "/>"), "Bassa"));
+      const tm = [];
+      if (has((n) => n.durata === "poco")) tm.push(it(ic('<rect x="6" y="7" width="8" height="6" rx="1.5" ' + st + "/>"), "Breve"));
+      if (has((n) => n.durata === "abbastanza")) tm.push(it(ic('<rect x="3.5" y="5.5" width="13" height="9" rx="2" ' + st + "/>"), "Moderata"));
+      if (has((n) => n.durata === "molto")) tm.push(it(ic('<rect x="1" y="3" width="18" height="14" rx="2" ' + st + "/>"), "Lunga"));
+      const rk = [];
+      [["procedurale", "Procedurale"], ["economico", "Economico"], ["reputazionale", "Reputazionale"]].forEach((r) => {
+        if (has((n) => n.rischio === r[0])) rk.push(it(ic('<rect x="2" y="4" width="16" height="12" rx="2" fill="' + RISK[r[0]] + '" stroke="#7C8496" stroke-width="1.2"/>'), r[1]));
+      });
+      const sg = [];
+      if (has((n) => n.attenzione)) sg.push(it(ic('<polygon points="10,2 18,16 2,16" fill="#E8A317"/><text x="10" y="14.5" text-anchor="middle" font-size="9" font-weight="800" fill="#1F2A44" font-family="sans-serif">!</text>'), "Richiede più attenzione"));
+      if (has((n) => n.attesa)) sg.push(it(ic('<circle cx="10" cy="10" r="8" fill="#fff" stroke="#4A6FA5" stroke-width="1.6"/><path d="M6 6 H14 L6 14 H14 Z" fill="#4A6FA5"/>'), "Attese"));
+      if (has((n) => n.inefficienza)) sg.push(it(ic('<circle cx="10" cy="10" r="8" fill="#6B4FA0"/><path d="M11 4.5 L6.5 10.8 H9.7 L8.8 15.5 L13.5 9.2 H10.3 Z" fill="#fff"/>'), "Inefficienze"));
+      al = grp("Frequenza (forma)", fq) + grp("Tempo (misura)", tm) + grp("Rischio (colore)", rk) + grp("Segni", sg);
+    }
     el.innerHTML =
-      '<p class="lg-how">Ogni colore è un ruolo: quando il colore del riquadro cambia, il lavoro passa a un altro ruolo.</p>' +
+      '<p class="lg-how">' + (proc.alAnalisi ? "Ogni colore di bordo è un ruolo. Forma, misura, colore e segni dei riquadri raccontano le tue risposte ad Al Fly." : "Ogni colore è un ruolo: quando il colore del riquadro cambia, il lavoro passa a un altro ruolo.") + "</p>" +
       '<div class="lg-group"><strong>Ruoli</strong>' + roles + "</div>" +
-      (stati ? '<div class="lg-group"><strong>Passaggi</strong>' + stati + "</div>" : "");
+      (stati && !proc.alAnalisi ? '<div class="lg-group"><strong>Passaggi</strong>' + stati + "</div>" : "") + al;
     return el;
   }
 

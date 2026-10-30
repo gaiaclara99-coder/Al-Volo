@@ -35,6 +35,8 @@ window.FRED_FLOW = {
     mercoledi: {
       "type": "domande",
       "dayLabel": "Tappa 1 di 5",
+      // una tappa di Fred al giorno (con ?prova nell'indirizzo, tutto di seguito)
+      "unaTappaAlGiorno": true,
       "teaser": "Fred ha qualche domanda per te",
       "greeting": [
         "Ciao! Sono Fred Quenza, il radiofonista dell'equipaggio di Al Volo.",
@@ -360,7 +362,7 @@ window.FRED_FLOW = {
     },
 
     alfly: {
-      "type": "esplorazione",
+      "type": "analisi",
       "dayLabel": "Una domanda al giorno",
       "teaser": "Al Fly ha qualche domanda per te",
       "showScene": true,
@@ -379,197 +381,34 @@ window.FRED_FLOW = {
       "soglie": { "alta": 0.75, "media": 0.4 },
       // Al Fly è diviso in tappe brevi: ogni riga è una tappa, con gli id delle domande che contiene
       // (le domande di approfondimento seguono la loro domanda). Per raggrupparle, es. [["frequenza", "tempo"], …]
-      "tappe": [["frequenza"], ["ripetitive"], ["tempo"], ["delega"], ["attenzione"], ["rischi"], ["inefficienze"]],
-      // saluti delle tappe successive alla prima, uno per tappa (si ripetono in giro se le tappe sono di più)
-      "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!", "Quota di crociera raggiunta!", "Ultimo controllo prima dell'atterraggio!"],
-      // una tappa al giorno: la successiva si apre il giorno dopo
-      // APERTO SUBITO per le prove: Al Fly si usa anche senza aver fatto Fred (rimettere false a fine prova)
-      "apertoSubito": true,
-      "unaAlGiorno": false,   // SBLOCCATO per le prove: rimettere true per una domanda al giorno
+      // Al Fly: 6 domande, una al giorno. Le domande 1 e 2 riguardano solo le attività della persona.
+      "tappe": [["frequenza"], ["tempo"], ["attenzione"], ["rischi"], ["attese"], ["inefficienze"]],
+      // saluti delle tappe successive alla prima (si ripetono in giro)
+      "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!", "Quota di crociera raggiunta!"],
+      // Al Fly si apre dopo Fred (con la mappa concordata); per le prove usare l'indirizzo con ?prova
+      "apertoSubito": false,
+      "unaAlGiorno": true,    // una domanda al giorno (con ?prova nell'indirizzo, tutto di seguito)
       "closingDay": "Grazie! Per oggi è tutto: domani ti faccio la prossima domanda. Riparto.",
-      "closingLast": "Grazie! Per questa mappa le domande sono finite. Riparto.",
-      "questions": [
-        {
-          "id": "frequenza",
-          "type": "choice",
-          "text": "Con quale frequenza svolgi le singole attività?",
-          "options": [
-            "Più volte al giorno",
-            "Ogni giorno",
-            "2/3 volte a settimana",
-            "1 volta a settimana",
-            "1 volta al mese",
-            "Altro"
-          ],
-          "followUpsIf": {
-            "Altro": [
-              {
-                "id": "frequenza-altro",
-                "type": "open",
-                "text": "Altro: specifica.",
-                "placeholder": "Scrivi qui…"
-              }
-            ]
-          }
-        },
-        {
-          "id": "ripetitive",
-          "type": "choice",
-          "text": "Ci sono attività ripetitive?",
-          "options": [
-            "Sì",
-            "No"
-          ],
-          "followUpsIf": {
-            "Sì": [
-              {
-                "id": "ripetitive-quali",
-                "type": "selectSteps",
-                "text": "Segnalale nella mappa, poi premi «Fatto».",
-                "noneLabel": "Nessuna",
-                "doneLabel": "Fatto"
-              }
-            ]
-          }
-        },
-        {
-          "id": "tempo",
-          "type": "choice",
-          "text": "Quanto tempo impieghi a svolgere ciascuna attività?",
-          "options": [
-            "Poco",
-            "Abbastanza",
-            "Molto"
-          ],
-          "followUpsIf": {
-            "Molto": [
-              {
-                "id": "tempo-quali",
-                "type": "selectSteps",
-                "text": "Indica nella mappa e motiva la tua risposta: tocca le attività, poi premi «Fatto».",
-                "noneLabel": "Nessuna",
-                "doneLabel": "Fatto",
-                "followUps": [
-                  {
-                    "id": "tempo-quali-motivo",
-                    "type": "open",
-                    "text": "Motiva la tua risposta.",
-                    "placeholder": "Scrivi qui…"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "delega",
-          "type": "choice",
-          "text": "Ci sono attività che delegheresti volentieri?",
-          "options": [
-            "Sì",
-            "No"
-          ],
-          "followUpsIf": {
-            "Sì": [
-              {
-                "id": "delega-quali",
-                "type": "selectSteps",
-                "text": "Indicale nella mappa e motiva: tocca le attività, poi premi «Fatto».",
-                "noneLabel": "Nessuna",
-                "doneLabel": "Fatto",
-                "followUps": [
-                  {
-                    "id": "delega-quali-motivo",
-                    "type": "open",
-                    "text": "Motiva la tua risposta.",
-                    "placeholder": "Scrivi qui…"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "attenzione",
-          "type": "choice",
-          "text": "Ci sono attività che richiedono una maggior attenzione?",
-          "options": [
-            "Sì",
-            "No"
-          ],
-          "followUpsIf": {
-            "Sì": [
-              {
-                "id": "attenzione-quali",
-                "type": "selectSteps",
-                "text": "Indicale nella mappa e motiva: tocca le attività, poi premi «Fatto».",
-                "noneLabel": "Nessuna",
-                "doneLabel": "Fatto",
-                "followUps": [
-                  {
-                    "id": "attenzione-quali-motivo",
-                    "type": "open",
-                    "text": "Motiva la tua risposta.",
-                    "placeholder": "Scrivi qui…"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "rischi",
-          "type": "choice",
-          "text": "Ci sono attività che comportano dei rischi?",
-          "options": [
-            "Sì",
-            "No"
-          ],
-          "followUpsIf": {
-            "Sì": [
-              {
-                "id": "rischi-quali",
-                "type": "selectSteps",
-                "text": "Indicale nella mappa, poi premi «Fatto».",
-                "noneLabel": "Nessuna",
-                "doneLabel": "Fatto"
-              },
-              {
-                "id": "rischi-tipo",
-                "type": "multiChoice",
-                "text": "Che tipo di rischio pongono?",
-                "options": [
-                  "Economico",
-                  "Procedurale",
-                  "Reputazionale"
-                ],
-                "placeholder": "Altro (facoltativo)…",
-                "doneLabel": "Fatto"
-              }
-            ]
-          }
-        },
-        {
-          "id": "inefficienze",
-          "type": "choice",
-          "text": "Ci sono delle inefficienze o problematiche nel processo che non sono ancora emerse?",
-          "options": [
-            "Sì",
-            "No"
-          ],
-          "followUpsIf": {
-            "Sì": [
-              {
-                "id": "inefficienze-motivo",
-                "type": "open",
-                "text": "Motiva (attese, passaggi inutili, duplicazioni, sovraccarichi, strumenti inadeguati, misurazione insufficiente, priorità instabili, altro).",
-                "placeholder": "Scrivi qui…"
-              }
-            ]
-          }
-        }
-      ],
       "closing": "Grazie! Riparto.",
+      "closingLast": "Grazie! Ecco la tua mappa completa: forme, misure, colori e segni raccontano le tue risposte. Riparto!",
+      "mapUpdated": "Ecco la mappa aggiornata con le tue risposte.",
+      "mie": "Prima di cominciare: tocca nella mappa le attività che svolgi tu, poi premi «Fatto». Le domande riguarderanno solo queste.",
+      "q": {
+        "frequenza": { "text": "Con quale frequenza svolgi le singole attività?", "each": "«{passaggio}»",
+          "options": ["Più volte al giorno", "Ogni giorno", "2/3 volte a settimana", "1 volta a settimana", "1 volta al mese", "Altro"],
+          "altro": "Altro: specifica la frequenza di «{passaggio}»." },
+        "tempo": { "text": "Quanto tempo impieghi a svolgere ciascuna attività?", "each": "«{passaggio}»",
+          "options": ["Poco", "Abbastanza", "Molto"],
+          "motiva": "Hai indicato che «{passaggio}» richiede molto tempo: motiva la tua risposta." },
+        "attenzione": { "text": "Ci sono attività che richiedono una maggior attenzione?", "select": "Indicale nella mappa, poi premi «Fatto».", "motiva": "Motiva la tua risposta." },
+        "rischi": { "text": "Ci sono attività che comportano dei rischi?", "select": "Indicale nella mappa, poi premi «Fatto».",
+          "tipo": "Che tipo di rischio pone «{passaggio}»? Puoi scegliere più risposte.", "tipi": ["Economico", "Procedurale", "Reputazionale"] },
+        "attese": { "text": "Ti capita di aspettare informazioni, decisioni o passaggi per poter svolgere l'attività?", "select": "Indica l'attività nella mappa, poi premi «Fatto».", "specifica": "Specifica: cosa aspetti, e da chi?" },
+        "inefficienze": { "text": "Ci sono delle inefficienze o problematiche nel processo che non sono ancora emerse?", "select": "Indica l'attività nella mappa, poi premi «Fatto».",
+          "motiva": "Motiva (attese, passaggi inutili, duplicazioni, sovraccarichi, strumenti inadeguati, misurazione insufficiente, priorità instabili, altro)." }
+      },
+      // frequenza → forma del riquadro (alta = quadrato, media = rombo, bassa = cerchio; "Altro" = forma normale)
+      "frequenzaLivello": { "Più volte al giorno": "alta", "Ogni giorno": "media", "2/3 volte a settimana": "media", "1 volta a settimana": "bassa", "1 volta al mese": "bassa" },
       "character": {
         "id": "alfly",
         "name": "Al Fly"
@@ -577,57 +416,131 @@ window.FRED_FLOW = {
     },
 
     // Ally Fly: aperta da subito; la persona sceglie un passaggio e risponde ai blocchi A-D
+    // Ally Fly: dopo Al Fly, tre blocchi (uno al giorno) sulle attività critiche emerse con Al Fly
     ally: {
-      "type": "ally",
-      "dayLabel": "Un passaggio alla volta",
+      "type": "allyBlocchi",
+      "dayLabel": "Blocco 1 di 3",
       "teaser": "Ally Fly ha qualche domanda per te",
       "greeting": [
         "Ciao! Sono Ally Fly, pilota di Al Volo.",
-        "Guardiamo insieme un passaggio del lavoro: ti faccio qualche domanda su come si svolge. Rispondi con le parole che preferisci."
+        "Ripartiamo dalla mappa di Al Fly per guardare da vicino le attività critiche. Rispondi con le parole che preferisci."
       ],
       "greetingAgain": [
-        "Ally Fly in cabina: ripartiamo!"
+        "Ally Fly in cabina: ripartiamo!",
+        "Torre, qui Ally Fly: pronta al decollo!"
       ],
-      "thinkingAggregate": "Ally Fly sta preparando la mappa…",
-      "askStep": "Quale passaggio vuoi guardare con me? Toccalo nella mappa.",
-      "askStepText": "Di quale passaggio del tuo lavoro vuoi parlare? Scrivilo in poche parole.",
-      "stepLine": "Parliamo di «{passaggio}».",
-      "organizzative": [
-        "Dall'attesa di una persona, di un'approvazione o di un altro reparto",
-        "Dalla quantità di lavoro rispetto alle persone disponibili",
-        "Da come arrivano materiali o oggetti (imballi, consegne, spazi)"
-      ],
-      "closing": "Grazie! Per questo passaggio le domande sono finite.",
-      "againLabel": "Guarda un altro passaggio",
+      "unBloccoAlGiorno": true,
+      "closingDay": "Grazie! Per oggi è tutto: domani il prossimo blocco. Riparto.",
+      "closingLast": "Grazie! Le domande di Ally Fly sono finite. Riparto!",
+      "elenco": "Dal passaggio precedente risulta che le attività {elenco} presentano delle possibili criticità.",
+      "nessuna": "Dal passaggio precedente non sono emerse attività critiche.",
       "blocchi": [
         {
-          "id": "A",
-          "titolo": "Di che natura è il problema",
-          "questions": [
+          "id": "B1",
+          "titolo": "La priorità delle criticità e i legami tra loro",
+          "domande": [
             {
-              "id": "A1",
-              "type": "multiChoice",
-              "text": "Da cosa dipende soprattutto? Puoi scegliere più risposte.",
+              "id": "B1-1",
+              "type": "conferma",
+              "text": "Le confermi?",
               "options": [
-                "Dal tempo per cercare, ricopiare o controllare informazioni",
-                "Dall'attesa di una persona, di un'approvazione o di un altro reparto",
-                "Dalla quantità di lavoro rispetto alle persone disponibili",
-                "Da come arrivano materiali o oggetti (imballi, consegne, spazi)",
-                "Da informazioni poco chiare o incomplete"
+                "Sì",
+                "No"
               ],
-              "placeholder": "Altro…",
-              "doneLabel": "Fatto"
+              "seNo": "Cosa correggeresti?"
+            },
+            {
+              "id": "B1-2",
+              "type": "sinoMappa",
+              "text": "Ci sono altre criticità che vorresti aggiungere o di cui vorresti parlare?",
+              "options": [
+                "Sì",
+                "No"
+              ],
+              "select": "Indicale nella mappa, poi premi «Fatto».",
+              "poi": "Di cosa vorresti parlare?",
+              "aggiunge": true
+            },
+            {
+              "id": "B1-3",
+              "type": "sinoMappa",
+              "text": "Le criticità evidenziate influiscono su altre attività?",
+              "options": [
+                "Sì",
+                "No",
+                "Non so"
+              ],
+              "select": "Quali? Indicale nella mappa, poi premi «Fatto».",
+              "poi": "Perché?"
+            },
+            {
+              "id": "B1-4",
+              "type": "sinoTesto",
+              "text": "Le criticità dipendono da un problema a monte?",
+              "options": [
+                "Sì",
+                "No",
+                "Non lo so"
+              ],
+              "seSi": "Quale?"
+            },
+            {
+              "id": "B1-5",
+              "type": "perCriticita",
+              "text": "Segna quali criticità osservi direttamente e quali invece ti sono riportate da altri.",
+              "options": [
+                "La osservo direttamente",
+                "Mi è riportata da altri"
+              ]
             }
           ]
         },
         {
-          "id": "B",
-          "titolo": "Regole fisse o giudizio",
-          "questions": [
+          "id": "B2",
+          "titolo": "Le cause",
+          "domande": [
             {
-              "id": "B1",
+              "id": "B2-1",
+              "type": "open",
+              "text": "Pensando alle attività critiche, descrivi un caso recente in cui si è verificata una criticità: cosa doveva succedere, cosa è successo e con quali conseguenze?"
+            },
+            {
+              "id": "B2-2",
+              "type": "lista",
+              "text": "Quali sono, secondo te, i fattori che hanno causato la criticità? Elenca.",
+              "hint": "Scrivi un fattore alla volta e premi Invio."
+            },
+            {
+              "id": "B2-3",
+              "type": "multi",
+              "text": "Qual è la natura di questi fattori? Puoi scegliere più risposte.",
+              "options": [
+                "Persone: cosa impedisce di lavorare bene",
+                "Organizzazione: ruoli, responsabilità, coordinamento e decisioni",
+                "Processo: procedure",
+                "Strumenti: tecnologie e risorse utilizzate",
+                "Dati: informazioni incomplete o difficili da reperire",
+                "Contesto: norme, fornitori, clienti e condizioni esterne",
+                "Non so"
+              ],
+              "placeholder": "Altro: specifica…"
+            },
+            {
+              "id": "B2-4",
+              "type": "open",
+              "text": "Quanti casi «problematici» di questo tipo gestisci, indicativamente, in una settimana o in un mese?",
+              "placeholder": "Es. 5 a settimana"
+            }
+          ]
+        },
+        {
+          "id": "B3",
+          "titolo": "Regole fisse o giudizio",
+          "domande": [
+            {
+              "id": "B3-1",
               "type": "choice",
-              "text": "In questo passaggio si fanno sempre le stesse operazioni, nello stesso ordine?",
+              "text": "In queste attività si fanno sempre le stesse operazioni, nello stesso ordine?",
               "options": [
                 "Sempre",
                 "Quasi sempre",
@@ -636,7 +549,17 @@ window.FRED_FLOW = {
               ]
             },
             {
-              "id": "B2",
+              "id": "B3-2",
+              "type": "stima",
+              "text": "Su circa 100 casi, quanti richiedono un trattamento diverso?",
+              "options": [
+                "Non so"
+              ],
+              "placeholder": "Scrivi un numero…",
+              "poi": "Quali sono le eccezioni più frequenti?"
+            },
+            {
+              "id": "B3-3",
               "type": "choice",
               "text": "Per decidere cosa fare, ti basi su indicazioni scritte (procedure, tabelle, soglie) o sull'esperienza?",
               "options": [
@@ -646,8 +569,23 @@ window.FRED_FLOW = {
               ]
             },
             {
-              "id": "B3",
-              "type": "multiChoice",
+              "id": "B3-4",
+              "type": "open",
+              "text": "Le istruzioni coprono i casi abituali? Puoi descrivere una decisione che richiede esperienza e quali informazioni usi?"
+            },
+            {
+              "id": "B3-5",
+              "type": "sinoTesto",
+              "text": "Quando inizi, hai tutte le informazioni necessarie? Sono corrette, aggiornate e coerenti?",
+              "options": [
+                "Sì",
+                "No"
+              ],
+              "seNo": "Cosa manca di solito? Specifica."
+            },
+            {
+              "id": "B3-6",
+              "type": "multi",
               "text": "In che forma ti arrivano le informazioni che usi? Puoi scegliere più risposte.",
               "options": [
                 "Campi del gestionale o di una tabella",
@@ -657,102 +595,96 @@ window.FRED_FLOW = {
                 "Telefonate o a voce",
                 "Foto, oggetti o merce da guardare"
               ],
-              "placeholder": "Altro (facoltativo)…",
-              "doneLabel": "Fatto"
+              "placeholder": "Altro (facoltativo)…"
             },
             {
-              "id": "B4",
-              "type": "choice",
-              "text": "A un collega appena arrivato, quanto tempo servirebbe per imparare a farlo bene?",
-              "options": [
-                "Pochi minuti",
-                "Qualche giorno",
-                "Settimane o mesi"
-              ]
-            },
-            {
-              "id": "B5",
-              "type": "choice",
-              "text": "Capitano casi fuori dal solito?",
-              "options": [
-                "Quasi mai",
-                "Ogni tanto",
-                "Spesso"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "C",
-          "titolo": "Obiettivo chiaro",
-          "questions": [
-            {
-              "id": "C1",
+              "id": "B3-7",
               "type": "open",
-              "text": "Quando questo passaggio è fatto bene, come te ne accorgi?",
-              "placeholder": "Scrivi qui…"
+              "text": "Quali dati e accessi ti servono? Chi ne autorizza l'uso?"
             },
             {
-              "id": "C2",
+              "id": "B3-8",
+              "type": "open",
+              "text": "Dove sono conservati (se lo sono) i casi precedenti, i documenti e i risultati?"
+            },
+            {
+              "id": "B3-9",
+              "type": "sinoTesto",
+              "text": "Esistono esempi corretti e casi problematici che si potrebbero usare per una verifica?",
+              "options": [
+                "Sì",
+                "No",
+                "Non so"
+              ],
+              "seSi": "Quali, e dove si trovano?"
+            },
+            {
+              "id": "B3-10",
+              "type": "open",
+              "text": "In base a quali criteri il risultato viene approvato? Chi lo verifica? Esiste un esempio corretto?"
+            },
+            {
+              "id": "B3-11",
               "type": "choice",
               "text": "Il risultato è sempre dello stesso tipo, ad esempio un modulo compilato, un sì/no o un numero, o cambia ogni volta?",
               "options": [
                 "Sempre dello stesso tipo",
                 "Cambia"
               ]
-            }
-          ]
-        },
-        {
-          "id": "D",
-          "titolo": "Conseguenze e tempi",
-          "questions": [
-            {
-              "id": "D1",
-              "type": "choice",
-              "text": "Se in questo passaggio scappa un errore, cosa succede?",
-              "options": [
-                "Quasi nulla, si sistema subito",
-                "Ritardi o lavoro in più",
-                "Conseguenze serie (costi, sicurezza, clienti, norme)"
-              ]
             },
             {
-              "id": "D2",
+              "id": "B3-12",
+              "type": "errori",
+              "text": "Quali errori possono verificarsi, e con quali conseguenze? Elenca gli errori possibili.",
+              "hint": "Scrivi un errore alla volta, con la sua conseguenza, e premi Invio.",
+              "gravita": "Quanto è grave la conseguenza di «{errore}»?",
+              "livelli": [
+                "Trascurabile",
+                "Media",
+                "Grave"
+              ],
+              "ordinati": "Ecco gli errori in ordine di gravità:",
+              "piuGrave": "Il più grave che hai indicato è: «{errore}»."
+            },
+            {
+              "id": "B3-13",
               "type": "choice",
               "text": "Un errore si scopre facilmente?",
               "options": [
-                "Subito",
+                "Sì, subito",
                 "Dopo un po'",
                 "Difficilmente"
               ]
             },
             {
-              "id": "D3",
-              "type": "choice",
-              "text": "Quanto tempo c'è, di solito, tra quando arriva la richiesta e quando serve il risultato?",
-              "options": [
-                "Minuti",
-                "Ore",
-                "Giorni"
-              ]
-            },
-            {
-              "id": "D4",
-              "type": "choice",
-              "text": "Oggi qualcuno deve dare l'ok finale?",
-              "options": [
-                "Nessuno",
-                "Lo do io",
-                "Un'altra persona"
-              ]
-            },
-            {
-              "id": "D5",
+              "id": "B3-14",
               "type": "open",
-              "text": "Se questo passaggio cambiasse, cosa vorresti che restasse com'è?",
-              "placeholder": "Scrivi qui…",
-              "optional": true
+              "text": "Chi può accorgersene, con quale controllo o azione?"
+            },
+            {
+              "id": "B3-15",
+              "type": "open",
+              "text": "Quanto tempo richiede il controllo?"
+            },
+            {
+              "id": "B3-16",
+              "type": "choice",
+              "text": "Si perde meno tempo a correggere il problema o a rifare la procedura da capo?",
+              "options": [
+                "A correggere il problema",
+                "A rifare da capo",
+                "Non so"
+              ]
+            },
+            {
+              "id": "B3-17",
+              "type": "open",
+              "text": "Quali soluzioni hai già provato? Con quale risultato?"
+            },
+            {
+              "id": "B3-18",
+              "type": "open",
+              "text": "Secondo te, quale cambiamento nel processo o negli strumenti potrebbe risolvere il problema?"
             }
           ]
         }
@@ -809,6 +741,7 @@ window.FRED_FLOW = {
     { mode: "venerdi2",   day: "Ven · sett. 2", title: "Approvazione" },
     { mode: "concordata", day: "Ultima tappa",  title: "Mappa concordata" },
     { mode: "alfly",      day: "Al Fly",        title: "Punti critici" },
+    { mode: "ally",       day: "Ally Fly",      title: "Le criticità" },
     { mode: "libero",     day: "Con AI",        title: "Descrivi un processo" }   // non usata nel pilota
   ],
 

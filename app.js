@@ -164,14 +164,26 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   const sleep = (ms) => new Promise((r) => setTimeout(r, reduceMotion ? Math.min(ms, 150) : ms));
   /* Scorrimento: la conversazione non salta in fondo. Dopo ogni risposta, il primo messaggio nuovo
      viene portato in vista (se non lo è già); il resto lo si legge scorrendo. */
-  let anchorPending = true;
-  function scrollDown(elem) {
-    if (!elem || !anchorPending || state.replaying) return;
-    anchorPending = false;
-    const top = elem.getBoundingClientRect().top - ui.log.getBoundingClientRect().top + ui.log.scrollTop;
-    const visibleBottom = ui.log.scrollTop + ui.log.clientHeight;
-    if (top > visibleBottom - 40 || top < ui.log.scrollTop) ui.log.scrollTop = Math.max(0, top - 8);
+  let anchorPending = true, anchorEl = null, userScrolled = false, autoScrolling = false;
+  // il punto da tenere in vista: il primo messaggio arrivato dopo l'ultima risposta
+  function pin() {
+    if (!anchorEl || userScrolled || state.replaying) return;
+    if (!anchorEl.isConnected) { anchorEl = null; return; }
+    const top = anchorEl.getBoundingClientRect().top - ui.log.getBoundingClientRect().top + ui.log.scrollTop;
+    const target = Math.max(0, top - 8);
+    if (Math.abs(ui.log.scrollTop - target) > 2) { autoScrolling = true; ui.log.scrollTop = target; requestAnimationFrame(() => { autoScrolling = false; }); }
   }
+  function scrollDown(elem) {
+    if (state.replaying) return;
+    if (elem && anchorPending) {
+      anchorPending = false; userScrolled = false;
+      anchorEl = elem;     // il primo messaggio nuovo va in alto: da lì si legge scorrendo verso il basso
+    }
+    pin();
+  }
+  // se la persona scorre da sola, non la si sposta più fino alla prossima risposta
+  ["wheel", "touchmove", "keydown"].forEach((ev) => ui.log.addEventListener(ev, () => { if (!autoScrolling) userScrolled = true; }, { passive: true }));
+  if (window.ResizeObserver) new ResizeObserver(() => pin()).observe(ui.log);
 
   /* Tasto "Indietro": ogni risposta della tappa viene annotata; tornando indietro la tappa riparte
      e le risposte già date si rimettono da sole, fino alla domanda precedente, che si può cambiare. */
@@ -241,9 +253,11 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     ui.log.appendChild(t);
     scrollDown(t);
     if (!state.replaying) await sleep(500 + Math.min(text.length * 12, 900));
+    const wasAnchor = anchorEl === t;
     t.remove();
     guard(run);
-    addMsg("fred", text);
+    const msg = addMsg("fred", text);
+    if (wasAnchor) { anchorEl = msg; pin(); }
     state.busy = false;
   }
 
@@ -403,6 +417,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     }
     card.appendChild(row);
     ui.log.appendChild(card);
+    scrollDown(card);
     scrollDown();
     return card;
   }

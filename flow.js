@@ -76,7 +76,8 @@ window.FRED_FLOW = {
         {
           "id": "attivita-focus",
           "type": "pickActivity",
-          "text": "Quale delle attività tracciate sopra vuoi approfondire? Seleziona nella mappa.",
+          "text": "Quale delle attività tracciate sopra vuoi approfondire? Seleziona nella mappa: puoi sceglierne più di una, poi premi «Fatto».",
+          "eachIntro": "Approfondiamo «{y}» ({n} di {tot}).",
           "followUps": [
             {
               "id": "attivita-focus-motivo",
@@ -377,6 +378,7 @@ window.FRED_FLOW = {
       "introAlone": "Questa è la mappa {di_attivita}. Per ora è l'unica confermata: quando arriveranno quelle dei colleghi, qui le vedrai unite.",
       "thinkingAggregate": "Al Fly sta preparando la mappa concordata…",
       "askEdit": "Vuoi modificare qualcosa in questa mappa?",
+      "askStart": "Ti va di iniziare?",
       // quota di mappe in cui deve comparire un passaggio per essere verde (alta) o arancio (media); sotto è rosso
       "soglie": { "alta": 0.75, "media": 0.4 },
       // Al Fly è diviso in tappe brevi: ogni riga è una tappa, con gli id delle domande che contiene
@@ -394,9 +396,9 @@ window.FRED_FLOW = {
       "mapUpdated": "Ecco la mappa aggiornata con le tue risposte.",
       "mie": "Prima di cominciare: tocca nella mappa le attività che svolgi tu, poi premi «Fatto». Le domande riguarderanno solo queste.",
       "q": {
-        "frequenza": { "text": "Con quale frequenza svolgi le singole attività?", "each": "«{passaggio}»",
-          "options": ["Più volte al giorno", "Ogni giorno", "2/3 volte a settimana", "1 volta a settimana", "1 volta al mese", "Altro"],
-          "altro": "Altro: specifica la frequenza di «{passaggio}»." },
+        "frequenza": { "select": "Quali tra le tue attività svolgi più spesso? Selezionale nella mappa, poi premi «Fatto».",
+          "quante": "Quante volte svolgi «{passaggio}»? Scrivi il numero e scegli il periodo.",
+          "unita": ["al giorno", "a settimana", "al mese"] },
         "tempo": { "text": "Quanto tempo impieghi a svolgere ciascuna attività?", "each": "«{passaggio}»",
           "options": ["Poco", "Abbastanza", "Molto"],
           "motiva": "Hai indicato che «{passaggio}» richiede molto tempo: motiva la tua risposta." },
@@ -407,8 +409,8 @@ window.FRED_FLOW = {
         "inefficienze": { "text": "Ci sono delle inefficienze o problematiche nel processo che non sono ancora emerse?", "select": "Indica l'attività nella mappa, poi premi «Fatto».",
           "motiva": "Motiva (attese, passaggi inutili, duplicazioni, sovraccarichi, strumenti inadeguati, misurazione insufficiente, priorità instabili, altro)." }
       },
-      // frequenza → forma del riquadro (alta = quadrato, media = rombo, bassa = cerchio; "Altro" = forma normale)
-      "frequenzaLivello": { "Più volte al giorno": "alta", "Ogni giorno": "media", "2/3 volte a settimana": "media", "1 volta a settimana": "bassa", "1 volta al mese": "bassa" },
+      // frequenza → forma del riquadro: alta (2 o più volte al giorno) = quadrato; media (1 al giorno o 2–6 a settimana) = rombo;
+      // bassa (1 a settimana o meno, qualche volta al mese) = cerchio; attività non scelte tra le più frequenti = forma normale
       "character": {
         "id": "alfly",
         "name": "Al Fly"

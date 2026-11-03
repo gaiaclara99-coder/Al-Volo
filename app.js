@@ -93,6 +93,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* memoria piena o disattivata */ } }
   let profile = load(STORE, {}).profile || null;
   function saveProgress() {
+    try { saveActiveY(); } catch (e) { /* niente */ }
     store(STORE, { profile: profile, doneSteps: state.doneSteps, memory: state.memory });
   }
   let flushing = false;
@@ -139,7 +140,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   }
   function saveAnswer(key, value, steps, mapKey) {
     state.answers[key] = value;
-    if (!profile) return;
+    if (!profile || state.replaying) return;
     const row = {
       data_ora: new Date().toISOString(), codice: profile.codice, divisione: profile.divisione, ruolo: profile.ruolo,
       personaggio: characterName(), tappa: (FLOW.sessions[state.mode] || {}).dayLabel || state.mode,
@@ -161,14 +162,73 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     return e;
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, reduceMotion ? Math.min(ms, 150) : ms));
-  const scrollDown = () => { ui.log.scrollTop = ui.log.scrollHeight; };
+  /* Scorrimento: la conversazione non salta in fondo. Dopo ogni risposta, il primo messaggio nuovo
+     viene portato in vista (se non lo è già); il resto lo si legge scorrendo. */
+  let anchorPending = true;
+  function scrollDown(elem) {
+    if (!elem || !anchorPending || state.replaying) return;
+    anchorPending = false;
+    const top = elem.getBoundingClientRect().top - ui.log.getBoundingClientRect().top + ui.log.scrollTop;
+    const visibleBottom = ui.log.scrollTop + ui.log.clientHeight;
+    if (top > visibleBottom - 40 || top < ui.log.scrollTop) ui.log.scrollTop = Math.max(0, top - 8);
+  }
+
+  /* Tasto "Indietro": ogni risposta della tappa viene annotata; tornando indietro la tappa riparte
+     e le risposte già date si rimettono da sole, fino alla domanda precedente, che si può cambiare. */
+  state.rec = []; state.replayQ = []; state.replaying = false; state.recPause = 0;
+  function takeReplay(kind) {
+    if (state.recPause || !state.replayQ.length) return null;
+    if (state.replayQ[0].kind !== kind) { state.replayQ = []; endReplay(); return null; }
+    const r = state.replayQ.shift();
+    if (!state.replayQ.length) setTimeout(endReplay, 0);
+    return r;
+  }
+  async function rec(kind, live, encode) {
+    const r = takeReplay(kind);
+    if (r) { state.rec.push(r); await null; return r.v; }
+    if (state.recPause) return live();
+    state.recPause++;
+    let v;
+    try { v = await live(); } finally { state.recPause--; }
+    state.rec.push({ kind: kind, v: encode ? encode(v) : v });
+    updateBack();
+    return v;
+  }
+  function endReplay() {
+    if (!state.replaying) return;
+    state.replaying = false;
+    const last = [...ui.log.querySelectorAll(".msg-fred")].pop();
+    if (last) ui.log.scrollTop = Math.max(0, last.getBoundingClientRect().top - ui.log.getBoundingClientRect().top + ui.log.scrollTop - 8);
+    updateBack();
+  }
+  let backBtn = null;
+  function updateBack() {
+    if (!backBtn) return;
+    backBtn.hidden = !(state.rec.length && !state.done && !state.replaying && state.started);
+  }
+  function goBack() {
+    if (!state.rec.length || state.replaying) return;
+    const q = state.rec.slice(0, -1);
+    state.rec = [];
+    saveAnswer("indietro", "torna alla domanda precedente: " + (state.lastAskText || ""));
+    const snap = clone(state.snap || { memory: state.memory, doneSteps: state.doneSteps });
+    state.memory = snap.memory; state.doneSteps = snap.doneSteps;
+    state.restoring = true;
+    const mode = state.mode;
+    reset(mode);
+    state.recPause = 0;               // la domanda lasciata a metà non conta
+    state.replayQ = q; state.replaying = q.length > 0;
+    open();
+    state.restoring = false;
+  }
 
   function guard(run) { if (run !== state.run) throw new Error("demo interrotta"); }
 
   function addMsg(from, text, extraCls) {
     const m = el("div", "msg msg-" + from + (extraCls ? " " + extraCls : ""), text);
     ui.log.appendChild(m);
-    scrollDown();
+    if (from === "user") anchorPending = true; else scrollDown(m);
+    if (from === "fred") state.lastAskText = text;
     return m;
   }
 
@@ -179,8 +239,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     t.setAttribute("aria-label", "Fred sta scrivendo");
     t.innerHTML = "<i></i><i></i><i></i>";
     ui.log.appendChild(t);
-    scrollDown();
-    await sleep(500 + Math.min(text.length * 12, 900));
+    scrollDown(t);
+    if (!state.replaying) await sleep(500 + Math.min(text.length * 12, 900));
     t.remove();
     guard(run);
     addMsg("fred", text);
@@ -202,20 +262,27 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
 
   function actions(buttons) {
     clearComposer();
+    const nav = (b) => b.onClick === minimize || b.onClick === goHome;       // uscire dalla tappa non è una risposta
+    const r = buttons.some((b) => !nav(b)) ? takeReplay("btn") : null;
+    if (r && buttons[r.v] && !nav(buttons[r.v])) { state.rec.push(r); setTimeout(() => buttons[r.v].onClick(), 0); return; }
     const row = el("div", "row");
-    buttons.forEach((b) => {
+    buttons.forEach((b, i) => {
       const btn = el("button", "btn " + (b.primary ? "btn-primary" : "btn-ghost"), b.label);
       btn.type = "button";
-      btn.addEventListener("click", b.onClick);
+      btn.addEventListener("click", () => {
+        if (!nav(b) && !state.recPause) { state.rec.push({ kind: "btn", v: i }); updateBack(); }
+        b.onClick();
+      });
       row.appendChild(btn);
     });
     ui.composer.appendChild(row);
     row.querySelector("button").focus({ preventScroll: true });
-    scrollDown();
+    updateBack();
   }
 
   // Campo di testo libero (con eventuali risposte rapide sopra)
-  function askText(opts) {
+  function askText(opts) { return rec("text", () => askTextLive(opts)); }
+  function askTextLive(opts) {
     return new Promise((resolve) => {
       clearComposer();
       if (opts.options && opts.options.length) {
@@ -227,6 +294,10 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
           chips.appendChild(c);
         });
         ui.composer.appendChild(chips);
+      }
+      if (opts.noText && opts.options && opts.options.length) {      // solo pulsanti, niente "Oppure scrivilo tu"
+        ui.composer.querySelector(".chips button").focus({ preventScroll: true });
+        return;
       }
       const fieldId = "f" + Date.now();
       if (opts.options && opts.options.length) {
@@ -429,7 +500,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     fallbackNote: "Ho annotato le tue parole sul passaggio “{passaggio}”, così come le hai scritte."
   };
 
-  function askFrequency(q) {
+  function askFrequency(q) { return rec("freq", () => askFrequencyLive(q)); }
+  function askFrequencyLive(q) {
     return new Promise((resolve) => {
       clearComposer();
       const num = el("input", "num-input");
@@ -453,7 +525,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     });
   }
 
-  function askMulti(q) {
+  function askMulti(q) { return rec("multi", () => askMultiLive(q)); }
+  function askMultiLive(q) {
     return new Promise((resolve) => {
       clearComposer();
       const picked = [];
@@ -479,6 +552,15 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   }
 
   function pickSteps(q, proc, multiple) {
+    const r = takeReplay("pick");
+    if (r) {                 // risposta già data: si ridisegna la scelta e si va avanti
+      const nodes = r.v.map((id) => proc.nodes.find((n) => n.id === id)).filter(Boolean);
+      diagramCard({ proc: proc, selectedIds: nodes.map((n) => n.id) });
+      state.rec.push(r); return Promise.resolve(nodes);
+    }
+    return rec("pick", () => pickStepsLive(q, proc, multiple), (nodes) => nodes.map((n) => n.id));
+  }
+  function pickStepsLive(q, proc, multiple) {
     return new Promise((done) => {
       const chosen = [];
       const resolve = (nodes) => { card._freeze(nodes.map((n) => n.id)); done(nodes); };
@@ -508,7 +590,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       .map((s) => s.replace(/^\s*(?:\d+\s*[.)\-:]|[-•*–])\s*/, "").trim())
       .filter(Boolean);
   }
-  function askSteps(q) {
+  function askSteps(q) { return rec("steps", () => askStepsLive(q)); }
+  function askStepsLive(q) {
     return new Promise((resolve) => {
       clearComposer();
       const steps = [];
@@ -589,7 +672,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const t = String(title || PILOT.attivita || "Attività");
     return FredDiagram.autoLayout({ title: t.charAt(0).toUpperCase() + t.slice(1), lanes: ["Da indicare"], nodes: nodes, edges: edges });
   }
-  function askRoles(q, proc) {
+  function askRoles(q, proc) { return rec("roles", () => askRolesLive(q, proc)); }
+  function askRolesLive(q, proc) {
     return new Promise((resolve) => {
       const order = proc.nodes.slice();
       const roles = [];
@@ -702,23 +786,16 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       const li = role ? ctx.proc.lanes.indexOf(role) : -1;
       const nodes = li >= 0 ? ctx.proc.nodes.filter((n) => n.lane === li) : ctx.proc.nodes.slice();
       if (!nodes.length) return;
-      let node = nodes[0];
-      if (nodes.length > 1) {
-        await fredSay(fill(q.text, { ruolo: role }), run);
-        let card = null;
-        node = await new Promise((resolve) => {
-          card = diagramCard({ proc: ctx.proc, highlightLane: li >= 0 ? li : undefined, dimOthers: li >= 0, selectableIds: nodes.map((n) => n.id), onSelect: resolve });
-          choose(nodes.map((n) => n.label)).then((k) => resolve(nodes[k]));
-        });
-        guard(run); clearComposer();
-        if (card) card._freeze([node.id]);
-        addMsg("user", "“" + node.label + "”");
-      }
-      state.memory.focus = { ruolo: role, id: node.id, label: node.label };
-      saveAnswer(q.id, node.id, node.label);
+      // si possono scegliere più attività: poi Fred le fa approfondire una alla volta (vedi runDomande)
+      await fredSay(fill(q.text, { ruolo: role }), run);
+      let chosen = await pickSteps({ selectableIds: nodes.map((n) => n.id), doneLabel: q.doneLabel || "Fatto", noneLabel: null }, ctx.proc, true);
+      guard(run); clearComposer();
+      if (!chosen.length) chosen = [nodes[0]];
+      addMsg("user", chosen.map((n) => "“" + n.label + "”").join(", "));
+      state.memory.ys = chosen.map((n) => ({ id: n.id, label: n.label, ruolo: role, procY: null, approvedProcY: null }));
+      state.memory.focus = null; state.memory.procY = null; state.memory.approvedProcY = null;
+      saveAnswer(q.id, chosen.map((n) => n.id).join(","), chosen.map((n) => n.label).join(", "));
       saveProgress();
-      if (q.intro) await fredSay(fill(q.intro, { passaggio: node.label }), run);
-      for (const f of q.followUps || []) await askQuestion(run, f, ctx);
       return;
     }
     if (q.type === "assignRoles") {
@@ -772,17 +849,20 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       addMsg("user", yes ? q.options[0] : q.options[1]);
       if (!yes) return;
       let which = "x";
-      if (state.memory.procY && yLabel) {
+      saveActiveY();
+      const ysm = ysList().map((y, k) => ({ y: y, k: k })).filter((o) => o.y.procY);
+      if (ysm.length) {
         await fredSay(q.askWhich || "Quale mappa?", run);
-        const opts = [fill(q.whichX || "La mappa del processo", {}), fill(q.whichY || "La mappa di «{y}»", { y: yLabel })];
+        const opts = [fill(q.whichX || "La mappa del processo", {})].concat(ysm.map((o) => fill(q.whichY || "La mappa di «{y}»", { y: o.y.label })));
         const k = await choose(opts); guard(run); clearComposer(); addMsg("user", opts[k]);
-        which = k === 1 ? "y" : "x";
+        if (k > 0) { activateY(ysm[k - 1].k); which = "y"; }
       }
       if (which === "y") {
         const py = FredDiagram.autoLayout(clone(state.memory.procY));
         diagramCard({ proc: py });
         const res = await editMap(run, py, { askSelect: q.askSelect, askHow: q.askHow, memKey: "procY" });
         if (res.changed) ctx.procY = res.proc;
+        saveActiveY(); saveProgress();
         return;
       }
       const res = await editMap(run, ctx.proc, { askSelect: q.askSelect, askHow: q.askHow });
@@ -826,7 +906,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
         .concat(ses.questions);   // prima le domande sul suo caso, poi tutte quelle della tappa
     }
     const collected = [];
-    const focus = state.memory.focus && state.memory.focus.label;
+    const focus = ysList().length ? ysList().map((y) => y.label).join("», «") : (state.memory.focus && state.memory.focus.label);
     greeting = greeting.filter((l) => focus || l.indexOf("{focus}") < 0).map((l) => fill(l, { focus: focus || "" }));
     for (const line of greeting) await fredSay(line, run);
     guard(run);
@@ -841,10 +921,26 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const ctx = { ses: ses, proc: FredDiagram.autoLayout(clone(state.memory.proc || FLOW.process)), node: null, collected: collected };
     ctx.proc.nodes.forEach((n) => { delete n.isNew; });
     let shown = false;
-    for (const q of qs) {
+    for (let qi = 0; qi < qs.length; qi++) {
+      const q = qs[qi];
       if (!shown && ["selectStep", "selectSteps", "mapChange"].includes(q.type)) { diagramCard({ proc: ctx.proc }); shown = true; }
       if (q.type === "assignRoles") shown = true;      // la mappa compare alla fine dell'assegnazione
       await askQuestion(run, q, ctx);
+      if (q.type === "pickActivity") {
+        // le domande sull'attività (map: "y") che seguono si ripetono per ogni attività scelta
+        const group = [];
+        while (qi + 1 < qs.length && qs[qi + 1].map === "y") group.push(qs[++qi]);
+        const ys = ysList();
+        for (let k = 0; k < ys.length; k++) {
+          activateY(k);
+          ctx.procY = null; ctx.built = false;
+          if (ys.length > 1) await fredSay(fill(q.eachIntro || "Approfondiamo «{y}».", { y: ys[k].label, n: k + 1, tot: ys.length }), run);
+          for (const f of q.followUps || []) await askQuestion(run, f, ctx);
+          for (const g of group) await askQuestion(run, g, ctx);
+          saveActiveY(); saveProgress();
+        }
+        ctx.built = true;
+      }
     }
     if (followUp) state.memory.answers2 = collected.join("\n");
     await fredSay(ses.closing, run);
@@ -946,7 +1042,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   const isTerminal = (n) => n.type === "start" || n.type === "end";
   const q2 = (s) => "“" + s + "”";
 
-  function choose(list) {          // pulsanti a scelta; restituisce l'indice
+  function choose(list) { return rec("choose", () => chooseLive(list)); }
+  function chooseLive(list) {          // pulsanti a scelta; restituisce l'indice
     return new Promise((resolve) => {
       clearComposer();
       const chips = el("div", "chips");
@@ -1302,11 +1399,31 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     actions(btns);
   }
 
-  // le mappe della persona: quella del processo (X) e, se c'è, quella dell'attività approfondita (Y)
+  /* Attività approfondite (Y): la persona può sceglierne più di una. memory.ys = [{id, label, ruolo, procY, approvedProcY}];
+     quella "attiva" sta in memory.focus / procY / approvedProcY, come prima, e si scambia con activateY(k). */
+  function ysList() {
+    const m = state.memory;
+    if (!m.ys && m.focus && m.focus.id) m.ys = [{ id: m.focus.id, label: m.focus.label, ruolo: m.focus.ruolo, procY: m.procY || null, approvedProcY: m.approvedProcY || null }];
+    return m.ys || [];
+  }
+  function saveActiveY() {
+    const m = state.memory, f = m.focus;
+    if (!m.ys || !f || !f.id) return;
+    const e = m.ys.find((y) => y.id === f.id);
+    if (e) { e.procY = m.procY || null; e.approvedProcY = m.approvedProcY || null; }
+  }
+  function activateY(k) {
+    saveActiveY();
+    const y = ysList()[k]; if (!y) return;
+    const m = state.memory;
+    m.focus = { ruolo: y.ruolo, id: y.id, label: y.label };
+    m.procY = y.procY || null; m.approvedProcY = y.approvedProcY || null;
+  }
+  // le mappe della persona: quella del processo (X) e quelle delle attività approfondite (Y)
   function personMaps() {
+    saveActiveY();
     const list = [{ key: "proc", proc: state.memory.proc || FLOW.process, label: null }];
-    const y = (state.memory.focus || {}).label;
-    if (state.memory.procY && y) list.push({ key: "procY", proc: state.memory.procY, label: y });
+    ysList().forEach((y, k) => { if (y.procY) list.push({ key: "procY", proc: y.procY, label: y.label, yIndex: k }); });
     return list.map((m) => { const p = FredDiagram.autoLayout(clone(m.proc)); p.nodes.forEach((n) => { delete n.isNew; }); return Object.assign(m, { proc: p }); });
   }
   const saveSchema = (id, p) => saveAnswer(id, JSON.stringify({ title: p.title, lanes: p.lanes,
@@ -1314,8 +1431,9 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     edges: p.edges.map((e) => ({ from: e.from, to: e.to, label: e.label || "" })) }));
 
   async function approveOne(run, ses, m) {
+    if (m.yIndex != null) activateY(m.yIndex);
     state.inY = m.key === "procY";
-    try { return await approveOneInner(run, ses, m); } finally { state.inY = false; }
+    try { return await approveOneInner(run, ses, m); } finally { state.inY = false; saveActiveY(); }
   }
   async function approveOneInner(run, ses, m) {
     const rounds = ses.maxRounds || 3;
@@ -1379,6 +1497,14 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   // n.freq = alta|media|bassa (forma), n.durata = poco|abbastanza|molto (misura), n.attenzione (warning),
   // n.rischio = procedurale|economico|reputazionale (sfumatura di rosso), n.attesa (clessidra), n.inefficienza (fulmine)
   const RISK_ORDER = ["procedurale", "economico", "reputazionale"];
+  // "3 al giorno" → volte a settimana → alta (2+ al giorno), media (1 al giorno o 2–6 a settimana), bassa (meno)
+  function freqLevel(txt) {
+    const m = String(txt || "").match(/(\d+)\s*(.*)/); if (!m) return null;
+    const n = parseInt(m[1], 10), u = m[2].toLowerCase();
+    const perWeek = u.indexOf("giorno") >= 0 ? n * 7 : u.indexOf("settimana") >= 0 ? n : u.indexOf("mese") >= 0 ? n / 4.33 : null;
+    if (perWeek == null) return null;
+    return perWeek >= 14 ? "alta" : perWeek >= 2 ? "media" : "bassa";
+  }
   async function runAlAnalisi(run, ses) {
     const groups = ses.tappe;
     const i = alflyIndex();
@@ -1410,6 +1536,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
           saveAnswer("mappa_concordata_modificata", JSON.stringify({ nodes: proc.nodes.map((x) => ({ label: x.label, ruolo: proc.lanes[x.lane] })) }));
         }
       }
+      await fredSay(ses.askStart || "Ti va di iniziare?", run);
       await new Promise((resolve) => actions([{ label: "Va bene, iniziamo", primary: true, onClick: resolve },
                                               { label: "Più tardi", onClick: minimize }]));
       guard(run); clearComposer();
@@ -1430,7 +1557,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const Q = ses.q, step = groups[i][0];
     const save = (id, value, label) => saveAnswer(id, value, label || "");
     const sinoSelect = async (q, key) => {
-      const a = await askChoice(run, q.text, ["Sì", "No"]); save(key, a || "");
+      const a = await askChoice(run, q.text, ["Sì", "No"], { noText: true }); save(key, a || "");
       if (a !== "Sì") return [];
       const sel = await pickOnMap(run, q.select, proc, mie, true, null);
       save(key + "-attivita", sel.map((n) => n.label).join("\n"), sel.map((n) => n.label).join(", "));
@@ -1438,21 +1565,22 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     };
 
     if (step === "frequenza") {
-      await fredSay(Q.frequenza.text, run);
-      for (const id of mie) {
-        const n = node(id);
-        const a = await askChoice(run, fill(Q.frequenza.each, { passaggio: n.label }), Q.frequenza.options);
-        let val = a;
-        if (a === "Altro") val = "Altro: " + ((await askOpen(run, fill(Q.frequenza.altro, { passaggio: n.label }))) || "");
-        n.freq = (ses.frequenzaLivello || {})[a] || null;            // "Altro" o risposta scritta: forma normale
-        save("frequenza", val, n.label);
+      const freq = await pickOnMap(run, Q.frequenza.select, proc, mie, true, null);
+      save("frequenza-attivita", freq.map((n) => n.label).join("\n"), freq.map((n) => n.label).join(", "));
+      for (const s of freq) {
+        const n = node(s.id);
+        await fredSay(fill(Q.frequenza.quante, { passaggio: n.label }), run);
+        const a = await askFrequency({ units: Q.frequenza.unita });
+        guard(run); clearComposer(); addMsg("user", a);
+        n.freq = freqLevel(a);
+        save("frequenza", a, n.label);
       }
     } else if (step === "tempo") {
       await fredSay(Q.tempo.text, run);
       const molto = [];
       for (const id of mie) {
         const n = node(id);
-        const a = await askChoice(run, fill(Q.tempo.each, { passaggio: n.label }), Q.tempo.options);
+        const a = await askChoice(run, fill(Q.tempo.each, { passaggio: n.label }), Q.tempo.options, { noText: true });
         const v = String(a || "").toLowerCase();
         n.durata = ["poco", "abbastanza", "molto"].indexOf(v) >= 0 ? v : null;
         save("tempo", a || "", n.label);
@@ -1611,9 +1739,11 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       await fredSay(ses.ownLine, run);
       const p = FredDiagram.autoLayout(clone(own)); p.nodes.forEach((n) => { delete n.isNew; });
       diagramCard({ proc: p });
-      const y = state.memory.approvedProcY || state.memory.procY;
-      if (y) {
-        await fredSay(fill(ses.ownYLine, { y: (state.memory.focus || {}).label || "" }), run);
+      saveActiveY();
+      for (const yy of ysList()) {
+        const y = yy.approvedProcY || yy.procY;
+        if (!y) continue;
+        await fredSay(fill(ses.ownYLine, { y: yy.label }), run);
         const py = FredDiagram.autoLayout(clone(y)); py.nodes.forEach((n) => { delete n.isNew; });
         diagramCard({ proc: py });
       }
@@ -1730,10 +1860,11 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     let m = maps[0];
     if (maps.length > 1) {
       await fredSay(ses.askWhich, run);
-      const opts = [fill(ses.whichX, {}), fill(ses.whichY, { y: maps[1].label })];
+      const opts = maps.map((x, i) => i === 0 ? fill(ses.whichX, {}) : fill(ses.whichY, { y: x.label }));
       const k = await choose(opts); guard(run); clearComposer(); addMsg("user", opts[k]);
       m = maps[k];
     }
+    if (m.yIndex != null) activateY(m.yIndex);
     diagramCard({ proc: m.proc, bpmn: true });
     const res = await editMap(run, m.proc, { askSelect: ses.askSelect, memKey: m.key === "procY" ? "procY" : undefined });
     if (res.changed) {
@@ -1772,6 +1903,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       clearComposer();
       addMsg("user", ok ? yesLabel : noLabel);
       const vid = m.key === "procY" ? "verifica_attivita" : "verifica";
+      if (m.yIndex != null) activateY(m.yIndex);
       state.inY = m.key === "procY";
       if (ok) {
         saveAnswer(vid, "confermato");
@@ -2099,7 +2231,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const stale = (state.doneSteps.mercoledi && !m.proc) || isExampleMap(m.proc) || isExampleMap(m.approvedProc);
     if (stale) {
       ["mercoledi", "venerdi", "mercoledi2", "venerdi2", "concordata"].forEach((k) => { delete state.doneSteps[k]; });
-      ["proc", "procY", "approvedProc", "approvedProcY", "focus", "lastChange", "tappa4Giorno"].forEach((k) => { delete m[k]; });
+      ["proc", "procY", "approvedProc", "approvedProcY", "focus", "ys", "lastChange", "tappa4Giorno"].forEach((k) => { delete m[k]; });
     }
     ["alflyProc", "allyProc", "procC"].forEach((k) => { if (isExampleMap(m[k])) delete m[k]; });
     state.memory = m;
@@ -2392,6 +2524,16 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   }));
   roseEl.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRose(); });
 
+  (function () {
+    const head = ui.minimize && ui.minimize.parentNode;
+    if (!head) return;
+    backBtn = document.createElement("button");
+    backBtn.type = "button"; backBtn.className = "back-btn"; backBtn.hidden = true;
+    backBtn.textContent = "‹ Indietro"; backBtn.setAttribute("aria-label", "Torna alla domanda precedente");
+    backBtn.addEventListener("click", goBack);
+    head.insertBefore(backBtn, ui.minimize);
+  })();
+
   /* ---------------- ingresso: privacy, divisione, ruolo → codice ---------------- */
   const welcomeEl = document.getElementById("welcome");
   function setupWelcome() {
@@ -2417,6 +2559,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
 
   function finish() {
     state.done = true;
+    updateBack();
     state.doneSteps[state.mode] = true;
     renderTour();
     ui.badge.hidden = true;
@@ -2452,6 +2595,12 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     applyLayout();
     if (!state.started) {
       state.started = true;
+      if (!state.restoring) {
+        state.snap = clone({ memory: state.memory, doneSteps: state.doneSteps });
+        state.rec = []; state.replayQ = []; state.replaying = false;
+      }
+      anchorPending = true;
+      updateBack();
       const run = state.run;
       const ses = FLOW.sessions[state.mode];
       const flow = ses.type === "verifica" ? (r) => runVerifica(r, ses)

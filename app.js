@@ -84,9 +84,12 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
      Nel prodotto: invio al backend con solo divisione e ruolo.
      ------------------------------------------------------------------ */
   /* ---------------- pilota: profilo, progressi e invio delle risposte ---------------- */
-  const STORE = "alvolo-pilota";
-  const QUEUE = "alvolo-pilota-coda";
-  const endpointOk = () => /^https:\/\/script\.google\.com\/.+\/exec$/.test(String(PILOT.endpoint || ""));
+  // versione di test per amici e colleghi: ?test nell'indirizzo → tutto di seguito e NESSUNA risposta inviata al foglio;
+  // i progressi di test sono salvati a parte, così non si mescolano con quelli veri sullo stesso telefono
+  const TEST = /[?&]test\b/.test(location.search) || PILOT.test === true;
+  const STORE = TEST ? "alvolo-pilota-test" : "alvolo-pilota";
+  const QUEUE = TEST ? "alvolo-pilota-test-coda" : "alvolo-pilota-coda";
+  const endpointOk = () => !TEST && /^https:\/\/script\.google\.com\/.+\/exec$/.test(String(PILOT.endpoint || ""));
   function load(key, fallback) {
     try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; } catch (e) { return fallback; }
   }
@@ -140,7 +143,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   }
   function saveAnswer(key, value, steps, mapKey) {
     state.answers[key] = value;
-    if (!profile || state.replaying) return;
+    if (!profile || state.replaying || TEST) return;
     const row = {
       data_ora: new Date().toISOString(), codice: profile.codice, divisione: profile.divisione, ruolo: profile.ruolo,
       personaggio: characterName(), tappa: (FLOW.sessions[state.mode] || {}).dayLabel || state.mode,
@@ -2171,7 +2174,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   function alflyCount() { const s = FLOW.sessions.alfly; return (s && s.tappe) ? s.tappe.length : 1; }
   // una domanda di Al Fly al giorno; con ?prova nell'indirizzo il limite non vale (per provare tutto subito)
   // modalità prova: ?prova nell'indirizzo (o prova: true in config.js) → tutte le tappe si aprono subito, una dopo l'altra
-  const PROVA = /[?&]prova\b/.test(location.search) || PILOT.prova === true;
+  const PROVA = /[?&]prova\b/.test(location.search) || PILOT.prova === true || TEST;
   function fredWaits() {
     const s = FLOW.sessions.mercoledi;
     const next = nextFredStep();
@@ -2256,7 +2259,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   if (PROVA) {
     const note = document.createElement("p");
     note.className = "home-prova";
-    note.textContent = "Modalità prova: tutte le tappe si aprono subito, una dopo l'altra.";
+    note.textContent = TEST ? "Versione di prova: tutte le tappe si aprono subito e le risposte non vengono salvate."
+                            : "Modalità prova: tutte le tappe si aprono subito, una dopo l'altra.";
     const head = homeEl.querySelector(".home-head");
     if (head && head.parentNode) head.parentNode.insertBefore(note, head.nextSibling);
   }
@@ -2553,7 +2557,13 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   const welcomeEl = document.getElementById("welcome");
   function setupWelcome() {
     document.getElementById("privacyText").textContent = PILOT.notaPrivacy || "";
-    document.getElementById("configWarning").hidden = endpointOk();
+    const cw = document.getElementById("configWarning");
+    cw.hidden = endpointOk() || TEST;
+    if (TEST) {
+      const n = document.createElement("p"); n.className = "home-prova";
+      n.textContent = "Versione di prova: le tue risposte non vengono salvate da nessuna parte. Provala con calma!";
+      cw.parentNode.insertBefore(n, cw);
+    }
     document.getElementById("welcomeGo").addEventListener("click", () => {
       // codice di test: prefisso + 3 cifre casuali + suffisso (es. T123TT); divisione e ruolo arriveranno da Workday
       const n = String(Math.floor(Math.random() * 1000)).padStart(3, "0");

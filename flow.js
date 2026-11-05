@@ -40,7 +40,7 @@ window.FRED_FLOW = {
       "teaser": "Fred ha qualche domanda per te",
       "greeting": [
         "Ciao! Sono Fred Quenza, il radiofonista dell'equipaggio di Al Volo.",
-        "Sto raccogliendo informazioni su come si svolge l'attività del procurement, raccontata da chi la vive. Rispondi con le parole che preferisci.",
+        "Sto raccogliendo informazioni su come si svolge il lavoro, raccontato da chi lo vive. Rispondi con le parole che preferisci.",
         "Prima di cominciare: la mappa che costruiremo potrai modificarla in qualsiasi momento, anche dalla pagina dell'equipaggio con «Modifica la tua mappa»."
       ],
       "questions": [
@@ -355,7 +355,7 @@ window.FRED_FLOW = {
       "greeting": [
         "Radio di bordo in ascolto: ecco le mappe."
       ],
-      "ownLine": "Questa è la tua mappa {di_attivita}.",
+      "ownLine": "Questa è la mappa {di_attivita}.",
       "ownYLine": "E questa è la tua mappa dell'attività «{y}».",
       "thinking": "Fred cerca la mappa concordata…",
       "concLine": "Questa è la mappa concordata dal tuo ufficio, compilata dal o dalla responsabile.",
@@ -736,6 +736,9 @@ window.FRED_FLOW = {
   },
 
   // Tappe della barra della presentazione (in ordine)
+  // true = le domande parlano di "un'attività che svolgi al lavoro"; false = usano l'attività scritta in config.js
+  attivitaGenerica: true,
+
   tour: [
     { mode: "mercoledi",  day: "Mer · sett. 1", title: "Prime domande" },
     { mode: "venerdi",    day: "Ven · sett. 1", title: "Verifica dello schema" },
@@ -750,7 +753,7 @@ window.FRED_FLOW = {
   privacyNote: "Il tuo nome non viene registrato: le risposte sono legate a un codice di test.",
 
   process: {
-    title: "Processo del procurement",
+    title: "Esempio di processo",
     lanes: ["Operatore di linea", "Capo reparto", "Magazzino", "Ufficio acquisti"],
     nodes: [
       { id: "s",  type: "start",    lane: 0, row: 0, status: "confirmed", label: "Si accorge che manca il materiale" },
@@ -780,7 +783,7 @@ window.FRED_FLOW = {
   // Schema aggiornato dopo la settimana 2: la variante segnalata dai colleghi diventa un ramo
   // (chi avvisa direttamente il magazzino lo fa quando il capo reparto è assente)
   process2: {
-    title: "Processo del procurement",
+    title: "Esempio di processo",
     lanes: ["Operatore di linea", "Capo reparto", "Magazzino", "Ufficio acquisti"],
     nodes: [
       { id: "s",  type: "start",    lane: 0, row: 0, status: "confirmed", label: "Si accorge che manca il materiale" },

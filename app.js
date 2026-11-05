@@ -20,8 +20,14 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const join = (prep) => (prep.slice(-1) === "'" ? prep + rest : prep + " " + rest);
     return { attivita: act, di_attivita: join(p[0]), in_attivita: join(p[1]), su_attivita: join(p[2]) };
   }
+  // attività generica (per tutti): le domande non nominano più un'attività precisa; con FLOW.attivitaGenerica = false
+  // si torna all'attività scritta in config.js (es. "l'approvazione delle OdA")
+  const GENERICA = FLOW.attivitaGenerica !== false;
+  const ATT_TITOLO = GENERICA ? "La tua attività" : String(PILOT.attivita || "Attività");
   (function applyPilotConfig() {
-    const forms = activityForms(PILOT.attivita);
+    const forms = GENERICA
+      ? { attivita: "un'attività che svolgi al lavoro", di_attivita: "della tua attività", in_attivita: "in quest'attività", su_attivita: "su quest'attività" }
+      : activityForms(PILOT.attivita);
     let raw = JSON.stringify(FLOW.sessions);
     Object.keys(forms).forEach((k) => { raw = raw.split("{" + k + "}").join(JSON.stringify(forms[k]).slice(1, -1)); });
     FLOW.sessions = JSON.parse(raw);
@@ -687,7 +693,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     const nodes = steps.map((s, i) => ({ id: "p" + (i + 1), type: i === 0 ? "start" : i === steps.length - 1 ? "end" : "task",
                                          lane: 0, status: "confirmed", label: s }));
     const edges = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id }));
-    const t = String(title || PILOT.attivita || "Attività");
+    const t = String(title || ATT_TITOLO);
     return FredDiagram.autoLayout({ title: t.charAt(0).toUpperCase() + t.slice(1), lanes: ["Da indicare"], nodes: nodes, edges: edges });
   }
   function askRoles(q, proc) { return rec("roles", () => askRolesLive(q, proc)); }
@@ -1788,7 +1794,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     guard(run); clearComposer();
     addMsg("user", steps.map((s, i) => (i + 1) + ". " + s).join("\n"), "msg-list");
     saveAnswer(ses.steps.id, steps.join("\n"));
-    let proc = procFromSteps(steps, "Mappa concordata – " + (PILOT.attivita || ""));
+    let proc = procFromSteps(steps, GENERICA ? "Mappa concordata" : "Mappa concordata – " + (PILOT.attivita || ""));
     await fredSay(ses.roles.text, run);
     const chosen = await askRoles(ses.roles, proc);
     guard(run); clearComposer();

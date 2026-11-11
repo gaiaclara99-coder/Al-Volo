@@ -36,7 +36,7 @@ window.FRED_FLOW = {
       "type": "domande",
       "dayLabel": "Tappa 1 di 5",
       // una tappa di Fred al giorno (con ?prova nell'indirizzo, tutto di seguito)
-      "unaTappaAlGiorno": true,
+      "unaTappaAlGiorno": false,   // SBLOCCATO: tutto di seguito (rimettere true per una tappa al giorno)
       "teaser": "Fred ha qualche domanda per te",
       "greeting": [
         "Ciao! Sono Fred Quenza, il radiofonista dell'equipaggio di Al Volo.",
@@ -344,7 +344,7 @@ window.FRED_FLOW = {
       "maxRounds": 5,
       "askSelect": "Tocca nella mappa il passaggio da modificare.",
       "closing": "Grazie! La mappa concordata è registrata: Al Fly partirà da questa per le sue domande.",
-      "giornoSeparato": true
+      "giornoSeparato": false
     },
 
     // Fred finito: toccando la scheda si vedono la propria mappa e quella concordata
@@ -389,7 +389,7 @@ window.FRED_FLOW = {
       "greetingAgain": ["Cinture allacciate? Si riparte!", "Torre, qui Al Fly: pronto al decollo!", "Motori accesi, rotta confermata!", "Pista libera, si vola!", "Quota di crociera raggiunta!"],
       // Al Fly si apre dopo Fred (con la mappa concordata); per le prove usare l'indirizzo con ?prova
       "apertoSubito": false,
-      "unaAlGiorno": true,    // una domanda al giorno (con ?prova nell'indirizzo, tutto di seguito)
+      "unaAlGiorno": false,   // SBLOCCATO: tutto di seguito (rimettere true per una domanda al giorno)
       "closingDay": "Grazie! Per oggi è tutto: domani ti faccio la prossima domanda. Riparto.",
       "closing": "Grazie! Riparto.",
       "closingLast": "Grazie! Ecco la tua mappa completa: forme, misure, colori e segni raccontano le tue risposte. Riparto!",
@@ -431,7 +431,7 @@ window.FRED_FLOW = {
         "Ally Fly in cabina: ripartiamo!",
         "Torre, qui Ally Fly: pronta al decollo!"
       ],
-      "unBloccoAlGiorno": true,
+      "unBloccoAlGiorno": false,   // SBLOCCATO: tutto di seguito (rimettere true per un blocco al giorno)
       "closingDay": "Grazie! Per oggi è tutto: domani il prossimo blocco. Riparto.",
       "closingLast": "Grazie! Le domande di Ally Fly sono finite. Riparto!",
       "elenco": "Dal passaggio precedente risulta che le attività {elenco} presentano delle possibili criticità.",

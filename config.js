@@ -5,7 +5,7 @@
 window.AL_VOLO_PILOTA = {
 
   // 1. Indirizzo dello script di Google Fogli (passo 2 delle istruzioni): finisce con /exec
-  endpoint: "https://script.google.com/macros/s/AKfycbxEgmx3_kZxXuaLo5QdqWHFrVcfF7MbrDuHQJLOsN_itojXBwILYbeemXW2WxLi9eA/exec",
+  endpoint: "https://script.google.com/macros/s/AKfycbxpde3wLUUHgQ2S0wqA30gVrZovVdJNlaXcwoOebMJqajlvw1wzCWDlzwrtrBO89Y7z/exec",
 
   // 2. Chiave del pilota: deve essere UGUALE a quella scritta nello script di Google Fogli
   chiave: "i_fratelli_Fly_sono_i_migliori",

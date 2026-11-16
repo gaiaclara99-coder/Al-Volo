@@ -124,9 +124,70 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
       }
     } finally { flushing = false; }
   }
+  /* Immagini delle mappe (scheda "Mappe" del foglio, file PNG nel Drive di chi gestisce lo script).
+     Si mandano subito, una alla volta; restano in coda solo se manca la rete, e la coda è piccola
+     per non togliere spazio alle risposte. */
+  const QUEUE_IMG = QUEUE + "-mappe";
+  const IMG_MAX = 1500000;            // circa 1,5 MB di immagini in attesa, al massimo
+  let flushingImg = false;
+  async function sendImg(item) {
+    await fetch(PILOT.endpoint, { method: "POST", mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ chiave: PILOT.chiave, immagini: [item] }) });
+  }
+  function queueImg(item) {
+    const q = load(QUEUE_IMG, []); q.push(item);
+    while (q.length > 1 && JSON.stringify(q).length > IMG_MAX) q.shift();
+    if (JSON.stringify(q).length <= IMG_MAX) store(QUEUE_IMG, q);
+  }
+  async function flushImg() {
+    if (flushingImg || !endpointOk()) return;
+    flushingImg = true;
+    try {
+      let q = load(QUEUE_IMG, []);
+      while (q.length) {
+        try { await sendImg(q[0]); } catch (e) { break; }
+        q = load(QUEUE_IMG, []).slice(1);
+        store(QUEUE_IMG, q);
+      }
+    } finally { flushingImg = false; }
+  }
+  // una sola immagine per ogni versione diversa della mappa della persona
+  function mapSignature(p) {
+    // la stessa mappa vista in più tappe vale una volta; la concordata e quella di Al Fly e Ally contano a parte
+    const kind = state.mode === "concordata" ? "C" : p.alAnalisi ? "AL" : "F";
+    const t = JSON.stringify([kind, p.lanes, p.nodes.map((n) => [n.label, n.lane, n.status, n.isNew ? 1 : 0, n.freq, n.durata, n.rischio,
+      n.attenzione ? 1 : 0, n.attesa ? 1 : 0, n.inefficienza ? 1 : 0, n.level || ""]), p.edges.map((e) => [e.from, e.to, e.label || ""])]);
+    let h = 5381; for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+    return h.toString(36) + "-" + t.length;
+  }
+  function saveMapImage(proc) {
+    if (!profile || TEST || state.replaying || !endpointOk() || !window.FredDiagram || !FredDiagram.image) return;
+    if (!proc || !proc.nodes || !proc.nodes.length || proc === FLOW.process || proc.aggregated) return;
+    const p = clone(proc);
+    const sig = mapSignature(p);
+    const seen = state.memory.mappeImmagini || [];
+    if (seen.indexOf(sig) >= 0) return;
+    state.memory.mappeImmagini = seen.concat(sig).slice(-80);
+    saveProgress();
+    const now = new Date();
+    const tappa = (FLOW.sessions[state.mode] || {}).dayLabel || state.mode;
+    const quando = now.toLocaleDateString("it-IT") + " " + now.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+    const item = { data_ora: now.toISOString(), codice: profile.codice, divisione: profile.divisione, ruolo: profile.ruolo,
+                   personaggio: characterName(), tappa: tappa, mappa: mapText(p) };
+    const heading = "Codice " + profile.codice + " · " + item.personaggio + " · " + tappa + " · " + quando;
+    setTimeout(async () => {
+      const png = await FredDiagram.image(p, heading);
+      if (!png) return;
+      item.png = png;
+      try { await sendImg(item); } catch (e) { queueImg(item); }
+    }, 300);
+  }
+
   window.addEventListener("online", flush);
+  window.addEventListener("online", flushImg);
   // finché ci sono risposte in coda, si riprova da soli ogni 20 secondi
-  setInterval(() => { if (load(QUEUE, []).length) flush(); }, 20000);
+  setInterval(() => { if (load(QUEUE, []).length) flush(); if (load(QUEUE_IMG, []).length) flushImg(); }, 20000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
 
   function characterName() {
@@ -426,6 +487,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     }
     card.appendChild(row);
     ui.log.appendChild(card);
+    saveMapImage(proc);
     scrollDown(card);
     scrollDown();
     return card;

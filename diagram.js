@@ -451,5 +451,125 @@ window.FredDiagram = (function () {
     return el;
   }
 
-  return { render: render, legend: legend, autoLayout: autoLayout };
+  /* Immagine PNG della mappa con la legenda, da salvare nel foglio (scheda "Mappe").
+     Si disegna su un canvas: niente foreignObject, così funziona anche su iPhone.
+     Restituisce il PNG in base64 (senza "data:image/png;base64,"), oppure null se non riesce. */
+  function legendData(proc) {
+    const cols = laneColors(proc);
+    const box = (stroke, fill, w, dash) => '<rect x="2" y="2" width="14" height="14" rx="3" fill="' + fill + '" stroke="' + stroke +
+      '" stroke-width="' + (w || 2) + '"' + (dash ? ' stroke-dasharray="3 2"' : "") + "/>";
+    const has = (f) => proc.nodes.some(f);
+    const groups = [];
+    const roles = [];
+    proc.lanes.forEach((name, i) => { if (has((n) => n.lane === i)) roles.push({ icon: box(cols[i], tint(cols[i], 0.12), 2.5), text: name }); });
+    groups.push({ title: "Ruoli", items: roles });
+    if (!proc.alAnalisi) {
+      const st = [];
+      if (has((n) => n.level)) {
+        if (has((n) => n.isNew)) st.push({ icon: box("#2E7D4F", "#ECF7F0", 2.5), text: "Cambiato da te" });
+        st.push({ icon: box("#2E7D4F", "#E7F3EC", 2.5), text: "In quasi tutte le mappe" });
+        st.push({ icon: box("#B86200", "#FFF0DC", 2.5), text: "In alcune mappe" });
+        st.push({ icon: box("#B3261E", "#FCE8E6", 2.5), text: "In poche mappe" });
+      } else {
+        if (has((n) => n.isNew)) st.push({ icon: box("#7C8496", "#ECF7F0", 1.5), text: "Cambiato da te (DA TE)" });
+        if (has((n) => n.status === "context")) st.push({ icon: box("#8E97A8", "#F1F2F5", 2, true), text: "Attività prima e dopo" });
+        if (has((n) => n.status === "variant")) st.push({ icon: box("#7C8496", "#FFF5E2", 1.5), text: "Variante (con il segno !)" });
+        if (has((n) => n.status === "verify")) st.push({ icon: box("#7C8496", "#FFFFFF", 1.5, true), text: "Da verificare" });
+      }
+      if (st.length) groups.push({ title: "Passaggi", items: st });
+    } else {
+      const st = 'fill="#fff" stroke="#7C8496" stroke-width="1.8"';
+      const fq = [], tm = [], rk = [], sg = [];
+      if (has((n) => n.freq === "alta")) fq.push({ icon: '<rect x="3" y="3" width="14" height="14" ' + st + "/>", text: "Alta" });
+      if (has((n) => n.freq === "media")) fq.push({ icon: '<polygon points="10,1.5 18.5,10 10,18.5 1.5,10" ' + st + "/>", text: "Media" });
+      if (has((n) => n.freq === "bassa")) fq.push({ icon: '<circle cx="10" cy="10" r="7.5" ' + st + "/>", text: "Bassa" });
+      if (has((n) => n.durata === "poco")) tm.push({ icon: '<rect x="6" y="7" width="8" height="6" rx="1.5" ' + st + "/>", text: "Breve" });
+      if (has((n) => n.durata === "abbastanza")) tm.push({ icon: '<rect x="3.5" y="5.5" width="13" height="9" rx="2" ' + st + "/>", text: "Moderata" });
+      if (has((n) => n.durata === "molto")) tm.push({ icon: '<rect x="1" y="3" width="18" height="14" rx="2" ' + st + "/>", text: "Lunga" });
+      [["procedurale", "Procedurale"], ["economico", "Economico"], ["reputazionale", "Reputazionale"]].forEach((r) => {
+        if (has((n) => n.rischio === r[0])) rk.push({ icon: '<rect x="2" y="4" width="16" height="12" rx="2" fill="' + RISK[r[0]] + '" stroke="#7C8496" stroke-width="1.2"/>', text: r[1] });
+      });
+      if (has((n) => n.attenzione)) sg.push({ icon: '<polygon points="10,2 18,16 2,16" fill="#E8A317"/><text x="10" y="14.5" text-anchor="middle" font-size="9" font-weight="800" fill="#1F2A44" font-family="sans-serif">!</text>', text: "Richiede più attenzione" });
+      if (has((n) => n.attesa)) sg.push({ icon: '<circle cx="10" cy="10" r="8" fill="#fff" stroke="#4A6FA5" stroke-width="1.6"/><path d="M6 6 H14 L6 14 H14 Z" fill="#4A6FA5"/>', text: "Attese" });
+      if (has((n) => n.inefficienza)) sg.push({ icon: '<circle cx="10" cy="10" r="8" fill="#6B4FA0"/><path d="M11 4.5 L6.5 10.8 H9.7 L8.8 15.5 L13.5 9.2 H10.3 Z" fill="#fff"/>', text: "Inefficienze" });
+      [["Frequenza (forma)", fq], ["Tempo (misura)", tm], ["Rischio (colore)", rk], ["Segni", sg]].forEach((g) => { if (g[1].length) groups.push({ title: g[0], items: g[1] }); });
+    }
+    const how = proc.alAnalisi
+      ? "Ogni colore di bordo è un ruolo. Forma, misura, colore e segni dei riquadri raccontano le risposte ad Al Fly."
+      : "Ogni colore è un ruolo: quando il colore del riquadro cambia, il lavoro passa a un altro ruolo.";
+    return { how: how, groups: groups };
+  }
+
+  function svgImage(markup) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
+    });
+  }
+
+  async function image(proc, heading) {
+    try {
+      const svg = render(proc, { size: "full" });
+      svg.setAttribute("xmlns", NS);
+      const W = +svg.getAttribute("width"), H = +svg.getAttribute("height");
+      const mapImg = await svgImage(new XMLSerializer().serializeToString(svg));
+      const L = legendData(proc);
+      const icons = await Promise.all([].concat.apply([], L.groups.map((g) => g.items)).map((it) =>
+        svgImage('<svg xmlns="' + NS + '" width="20" height="20" viewBox="0 0 20 20">' + it.icon + "</svg>")));
+      const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
+      const pad = 24, width = Math.max(W, 560) + pad * 2;
+      const meas = document.createElement("canvas").getContext("2d");
+      // impaginazione della legenda: prima si misura, poi si disegna
+      const lines = [];   // {kind, text, x, y, icon}
+      let y = 0;
+      const wrapText = (text, font, maxW) => {
+        meas.font = font; const out = []; let cur = "";
+        String(text).split(/\s+/).forEach((w) => { const t = cur ? cur + " " + w : w; if (meas.measureText(t).width > maxW && cur) { out.push(cur); cur = w; } else cur = t; });
+        if (cur) out.push(cur); return out;
+      };
+      const headFont = "700 18px " + FONT, howFont = "13px " + FONT, grpFont = "700 13px " + FONT, itemFont = "13px " + FONT;
+      wrapText(heading || "", headFont, width - pad * 2).forEach((t) => { lines.push({ kind: "head", text: t, x: pad, y: y + 18 }); y += 24; });
+      y += 8; const mapY = y; y += H + 18;
+      wrapText(L.how, howFont, width - pad * 2).forEach((t) => { lines.push({ kind: "how", text: t, x: pad, y: y + 13 }); y += 18; });
+      y += 6;
+      let k = 0;
+      L.groups.forEach((g) => {
+        lines.push({ kind: "grp", text: g.title, x: pad, y: y + 13 }); y += 22;
+        let x = pad;
+        meas.font = itemFont;
+        g.items.forEach((it) => {
+          const w = 20 + 6 + meas.measureText(it.text).width + 18;
+          if (x + w > width - pad && x > pad) { x = pad; y += 26; }
+          lines.push({ kind: "item", text: it.text, x: x, y: y, icon: icons[k++] });
+          x += w;
+        });
+        y += 32;
+      });
+      const height = y + pad - 10;
+      const scale = Math.max(1, Math.min(2, 2400 / width));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(width * scale); cv.height = Math.round((height + pad) * scale);
+      const ctx = cv.getContext("2d");
+      ctx.scale(scale, scale);
+      ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, width, height + pad);
+      ctx.translate(0, pad);
+      ctx.drawImage(mapImg, pad, mapY, W, H);
+      lines.forEach((l) => {
+        if (l.kind === "item") {
+          ctx.drawImage(l.icon, l.x, l.y, 20, 20);
+          ctx.font = itemFont; ctx.fillStyle = C.ink2; ctx.textBaseline = "middle"; ctx.fillText(l.text, l.x + 26, l.y + 10);
+          ctx.textBaseline = "alphabetic";
+        } else {
+          ctx.font = l.kind === "head" ? headFont : l.kind === "grp" ? grpFont : howFont;
+          ctx.fillStyle = l.kind === "how" ? C.ink2 : C.ink;
+          ctx.fillText(l.text, l.x, l.y);
+        }
+      });
+      return cv.toDataURL("image/png").split(",")[1] || null;
+    } catch (e) { return null; }
+  }
+
+  return { render: render, legend: legend, autoLayout: autoLayout, image: image };
 })();

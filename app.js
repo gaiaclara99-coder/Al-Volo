@@ -907,7 +907,8 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
         nodes: p.nodes.map((n) => ({ id: n.id, type: n.type, lane: n.lane, label: n.label })),
         edges: p.edges.map((e) => ({ from: e.from, to: e.to, label: e.label || "" })) }));
       await fredSay("Ecco la mappa con i tuoi passaggi e le tue parole.", run);
-      diagramCard({ proc: ctx.proc });
+      if (ctx.inY && state.memory.proc) { saveActiveY(); diagramCard({ proc: mergeYs(state.memory.proc, ysList()) }); }   // l'approfondimento dentro la mappa del processo
+      else diagramCard({ proc: ctx.proc });
       return;
     }
     if (q.type === "selectStep" || q.type === "selectSteps") {
@@ -1025,6 +1026,9 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
           for (const g of group) await askQuestion(run, g, ctx);
           saveActiveY(); saveProgress();
         }
+        mergeYsForGood();
+        if (state.memory.proc) ctx.proc = FredDiagram.autoLayout(clone(state.memory.proc));
+        ctx.procY = null;
         ctx.built = true;
       }
     }
@@ -1235,10 +1239,14 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
         guard(run); clearComposer(); addMsg("user", a.text);
         const lane = await askLane(run, p, "Chi lo fa?");
         const nid = newNodeId(p);
+        // un passaggio aggiunto dentro un approfondimento è anche lui una sotto attività
+        const subOf = node.sub || (pick.k === "dopo" && p.nodes.some((n) => n.sub === node.id) ? node.id : null);
         let newType = "task";
         if (pick.k === "dopo" && node.type === "end") { node.type = "task"; newType = "end"; }        // nuovo ultimo passaggio
-        if (pick.k === "prima" && node.type === "start") { node.type = "task"; newType = "start"; }   // nuovo primo passaggio
-        p.nodes.push({ id: nid, type: newType, lane: lane, status: "confirmed", label: a.text, isNew: true });
+        if (pick.k === "prima" && node.type === "start" && !subOf) { node.type = "task"; newType = "start"; }   // nuovo primo passaggio
+        const nn = { id: nid, type: newType, lane: lane, status: "confirmed", label: a.text, isNew: true };
+        if (subOf) nn.sub = subOf;
+        p.nodes.push(nn);
         let branch = "";
         if (pick.k === "prima") {
           p.edges.filter((e) => e.to === node.id).forEach((e) => { e.to = nid; });
@@ -1505,6 +1513,57 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     m.focus = { ruolo: y.ruolo, id: y.id, label: y.label };
     m.procY = y.procY || null; m.approvedProcY = y.approvedProcY || null;
   }
+  /* Gli approfondimenti entrano nella mappa del processo: i passaggi di ogni attività approfondita
+     diventano sotto attività (sub = id della macro attività, bordo quadrato), ognuna nella colonna del suo ruolo,
+     e il passaggio successivo dell'attività viene dopo l'ultimo di loro. */
+  function chainOrder(py) {
+    const ins = {}; py.edges.forEach((e) => { ins[e.to] = true; });
+    const out = [], seen = {};
+    let cur = py.nodes.find((n) => !ins[n.id]) || py.nodes[0];
+    while (cur && !seen[cur.id]) {
+      seen[cur.id] = true; out.push(cur);
+      const e = py.edges.find((x) => x.from === cur.id && !seen[x.to]);
+      cur = e ? py.nodes.find((n) => n.id === e.to) : null;
+    }
+    py.nodes.forEach((n) => { if (!seen[n.id]) out.push(n); });
+    return out;
+  }
+  function mergeYs(base, ys) {
+    const p = clone(base);
+    (ys || []).forEach((y) => {
+      const py = y && y.procY;
+      if (!py || !py.nodes || !py.nodes.length) return;
+      const parent = p.nodes.find((n) => n.id === y.id && !n.sub);
+      if (!parent || p.nodes.some((n) => n.sub === parent.id)) return;      // attività non trovata o già unita
+      const used = {}; p.nodes.forEach((n) => { used[n.id] = true; });
+      const subs = chainOrder(py).map((n, i) => {
+        let id = parent.id + "-a" + (i + 1); while (used[id]) id += "x"; used[id] = true;
+        const role = (py.lanes || [])[n.lane] || "Non indicato";
+        let li = p.lanes.indexOf(role); if (li < 0) { p.lanes.push(role); li = p.lanes.length - 1; }
+        const m = { id: id, type: "task", lane: li, status: n.status || "confirmed", label: n.label, sub: parent.id };
+        if (n.note) m.note = n.note;
+        return m;
+      });
+      if (parent.type === "end") { parent.type = "task"; subs[subs.length - 1].type = "end"; }   // l'attività era l'ultima: ora finisce l'approfondimento
+      p.edges.filter((e) => e.from === parent.id).forEach((e) => { e.from = subs[subs.length - 1].id; });
+      p.edges.push({ from: parent.id, to: subs[0].id });
+      subs.slice(1).forEach((n, i) => p.edges.push({ from: subs[i].id, to: n.id }));
+      p.nodes.splice(p.nodes.indexOf(parent) + 1, 0, ...subs);
+    });
+    return FredDiagram.autoLayout(p);
+  }
+  // fine della tappa 1 (e chi aveva già mappe separate): gli approfondimenti entrano per sempre nella mappa del processo
+  function mergeYsForGood() {
+    const m = state.memory;
+    saveActiveY();
+    const ys = ysList();
+    if (!m.proc || !ys.some((y) => y.procY)) return;
+    m.proc = mergeYs(m.proc, ys);
+    if (m.approvedProc) m.approvedProc = mergeYs(m.approvedProc, ys.map((y) => ({ id: y.id, procY: y.approvedProcY || y.procY })));
+    ys.forEach((y) => { y.procY = null; y.approvedProcY = null; y.unita = true; });
+    m.procY = null; m.approvedProcY = null;
+    saveProgress();
+  }
   // le mappe della persona: quella del processo (X) e quelle delle attività approfondite (Y)
   function personMaps() {
     saveActiveY();
@@ -1513,7 +1572,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
     return list.map((m) => { const p = FredDiagram.autoLayout(clone(m.proc)); p.nodes.forEach((n) => { delete n.isNew; }); return Object.assign(m, { proc: p }); });
   }
   const saveSchema = (id, p) => saveAnswer(id, JSON.stringify({ title: p.title, lanes: p.lanes,
-    nodes: p.nodes.map((n) => ({ id: n.id, type: n.type, lane: n.lane, label: n.label, note: n.note })),
+    nodes: p.nodes.map((n) => ({ id: n.id, type: n.type, lane: n.lane, label: n.label, note: n.note, approfondisce: n.sub || undefined })),
     edges: p.edges.map((e) => ({ from: e.from, to: e.to, label: e.label || "" })) }));
 
   async function approveOne(run, ses, m) {
@@ -2825,6 +2884,7 @@ window.AL_VOLO_VERSIONE = "21-10 sera";
   if (saved.doneSteps) state.doneSteps = saved.doneSteps;
   if (saved.memory) state.memory = saved.memory;
   cleanOldExampleMaps();
+  if (state.doneSteps.mercoledi) mergeYsForGood();   // chi aveva già le mappe degli approfondimenti separate
   reset(nextFredStep() || "venerdi2");
   setupWelcome();
   applyPhoneLayout();

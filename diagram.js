@@ -88,6 +88,11 @@ window.FredDiagram = (function () {
      4. sceglie da dove far uscire le frecce per non attraversare nodi.
      ------------------------------------------------------------------ */
   function autoLayout(proc) {
+    // sotto attività (passaggi di un'attività approfondita): "sub" = id della macro attività.
+    // Si dispongono come gli altri passaggi; se la macro attività non c'è più, tornano passaggi normali.
+    const ids = {};
+    proc.nodes.forEach((n) => { ids[n.id] = n; });
+    proc.nodes.forEach((n) => { if (n.sub && (!ids[n.sub] || ids[n.sub].sub)) delete n.sub; });
     const nodes = proc.nodes, edges = proc.edges;
     const byId = {};
     nodes.forEach((n) => { byId[n.id] = n; });
@@ -275,7 +280,7 @@ window.FredDiagram = (function () {
       const isTerminal = !AL && (n.type === "start" || n.type === "end");   // nella mappa di Al Fly anche inizio e fine sono riquadri normali
       const rc = cols[n.lane] || C.ink;
       let fill = "#FFFFFF", stroke = rc, sw = 2.2, dash = null, text = C.ink;
-      if (isTerminal) { fill = rc; stroke = rc; text = "#FFFFFF"; }
+      // inizio e fine: pillola bianca con il bordo del colore del ruolo (senza riempimento)
       if (n.status === "variant") { fill = C.variantFill; }          // il bordo resta del colore del ruolo; il "!" la segnala
       if (n.status === "verify") { dash = "4 3"; if (isTerminal) { fill = "#FFFFFF"; text = C.ink; } }
       if (n.status === "context") { stroke = "#8E97A8"; fill = "#F1F2F5"; dash = "2 3"; text = C.ink; }   // attività prima e dopo
@@ -301,7 +306,8 @@ window.FredDiagram = (function () {
         const hw = S.nodeW / 2, hh = decH / 2;
         shape = s("polygon", { points: [n._cx, n._cy - hh, n._cx + hw, n._cy, n._cx, n._cy + hh, n._cx - hw, n._cy].join(" ") }, g);
       } else {
-        shape = s("rect", { x: x, y: y, width: S.nodeW, height: S.nodeH, rx: isTerminal ? S.nodeH / 2 : 6 }, g);
+        // macro attività: bordo rotondo; sotto attività: bordo quadrato; inizio e fine: pillola
+        shape = s("rect", { x: x, y: y, width: S.nodeW, height: S.nodeH, rx: isTerminal ? S.nodeH / 2 : n.sub ? 0 : S.nodeH * 0.32 }, g);
       }
       shape.setAttribute("fill", fill);
       shape.setAttribute("stroke", stroke);
